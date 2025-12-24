@@ -1,4 +1,5 @@
 ﻿using BizBot.WebApi.Models;
+using BizBot.WebApi.Responses;
 using BizBot.WebApi.Services;
 using Microsoft.AspNetCore.Mvc;
 
@@ -27,8 +28,14 @@ namespace BizBot.WebApi.Endpoints
                 [FromServices] AzureAISearchService searchService) =>
             {
                 var context = await searchService.SearchRelevantContextSimpleAsync(query, tenantId);
-                
-                return Results.Ok(new { context });
+
+                //return Results.Ok(new { context });
+                return Results.Ok(new SearchResponse(
+                    context
+                        .Split("•", StringSplitOptions.RemoveEmptyEntries)
+                        .Select(c => new SearchResultItem(c.Trim(), null))
+                        .ToList()
+                ));
             }).WithName("Search");
 
             group.MapDelete("/document/{documentId}", async (

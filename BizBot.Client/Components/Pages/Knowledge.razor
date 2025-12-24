@@ -1,0 +1,86 @@
+﻿@page "/knowledge"
+
+@rendermode InteractiveServer
+
+@using BizBot.Client.Services
+@using MudBlazor
+@inject SearchClientService _SearchService
+
+<MudPaper Class="pa-6" Elevation="2" MaxWidth="800px">
+
+    <MudText Typo="Typo.h4">Knowledge Indexing</MudText>
+    <MudText Color="Color.Secondary" Class="mb-4">
+        Add content BizBot can search and answer questions from.
+    </MudText>
+
+    <MudDivider Class="mb-4" />
+
+    <MudTextField @bind-Value="Title"
+                  Label="Title"
+                  Required="true"
+                  FullWidth />
+
+    <MudTextField @bind-Value="Content"
+                  Label="Content"
+                  Required="true"
+                  Lines="8"
+                  TextArea="true"
+                  FullWidth
+                  Class="mt-3" />
+
+    <MudButton Color="Color.Primary"
+               Variant="Variant.Filled"
+               Class="mt-4"
+               Disabled="@IsSubmitting"
+               OnClick="IndexContent">
+        Index Knowledge
+    </MudButton>
+
+    @if (!string.IsNullOrEmpty(StatusMessage))
+    {
+        <MudAlert Severity="@AlertSeverity" Class="mt-4">
+            @StatusMessage
+        </MudAlert>
+    }
+
+</MudPaper>
+
+@code {
+    string TenantId = "tenant_123"; // later: from auth
+    string Title = "";
+    string Content = "";
+    bool IsSubmitting = false;
+
+    string StatusMessage = "";
+    Severity AlertSeverity = Severity.Info;
+
+    async Task IndexContent()
+    {
+        if (string.IsNullOrWhiteSpace(Title) || string.IsNullOrWhiteSpace(Content))
+        {
+            AlertSeverity = Severity.Warning;
+            StatusMessage = "Title and content are required.";
+            return;
+        }
+
+        IsSubmitting = true;
+        StatusMessage = "";
+
+        var success = await _SearchService.IndexAsync(TenantId, Content, Title);
+
+        if (success)
+        {
+            AlertSeverity = Severity.Success;
+            StatusMessage = "Knowledge indexed successfully!";
+            Title = "";
+            Content = "";
+        }
+        else
+        {
+            AlertSeverity = Severity.Error;
+            StatusMessage = "Failed to index knowledge.";
+        }
+
+        IsSubmitting = false;
+    }
+}

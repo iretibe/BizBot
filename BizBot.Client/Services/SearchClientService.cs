@@ -8,11 +8,12 @@ namespace BizBot.Client.Services
 
         public SearchClientService(HttpClient http) => _http = http;
 
-        public async Task<string> SearchAsync(string tenantId, string query)
+        public async Task<List<SearchResultItem>> SearchAsync(string tenantId, string query)
         {
             var url = $"api/search/search/{tenantId}?query={Uri.EscapeDataString(query)}";
             var resp = await _http.GetFromJsonAsync<SearchResponse>(url);
-            return resp?.Context ?? string.Empty;
+            
+            return resp?.Results ?? new();
         }
 
         public async Task<bool> IndexAsync(string tenantId, string content, string title)
@@ -25,6 +26,7 @@ namespace BizBot.Client.Services
             };
 
             var response = await _http.PostAsJsonAsync("api/search/index", doc);
+            
             return response.IsSuccessStatusCode;
         }
     }

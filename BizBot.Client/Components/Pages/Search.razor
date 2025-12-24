@@ -1,6 +1,95 @@
 ﻿@page "/search"
+
+@rendermode InteractiveServer
+
+@using BizBot.Client.Responses
+@using BizBot.Client.Services
 @using MudBlazor
-@inject BizBot.Client.Services.SearchClientService SearchService
+@inject SearchClientService _searchService
+
+<MudPaper Class="pa-4" Elevation="2">
+    <MudText Typo="Typo.h4">Knowledge Search</MudText>
+    <MudText Typo="Typo.body2" Color="Color.Secondary">
+        Search through your indexed business knowledge (documents, FAQs, pages).
+    </MudText>
+
+    <MudDivider Class="my-3" />
+
+    <MudTextField @bind-Value="Query"
+                  Label="Ask your question..."
+                  FullWidth="true"
+                  Disabled="@IsLoading" />
+
+    <MudButton OnClick="RunSearch"
+               Color="Color.Primary"
+               Variant="Variant.Filled"
+               Disabled="@IsLoading"
+               Class="mt-3">
+        @if (IsLoading)
+        {
+            <MudProgressCircular Indeterminate="true" Size="Size.Small" Class="me-2" />
+            <span>Searching...</span>
+        }
+        else
+        {
+            <span>Search</span>
+        }
+    </MudButton>
+
+    @if (HasSearched && !IsLoading && Results.Count == 0)
+    {
+        <MudAlert Severity="Severity.Info" Class="mt-4">
+            No relevant knowledge found. Try indexing content first.
+        </MudAlert>
+    }
+
+    @if (Results.Any())
+    {
+        <MudDivider Class="my-4" />
+        <MudText Typo="Typo.h6">Results</MudText>
+
+        @foreach (var item in Results)
+        {
+            <MudPaper Elevation="1" Class="pa-3 mt-2">
+                <MudText Typo="Typo.body1">@item.Content</MudText>
+            </MudPaper>
+        }
+    }
+</MudPaper>
+
+@code {
+    string TenantId = "tenant_123";
+    string Query = "";
+
+    bool IsLoading = false;
+    bool HasSearched = false;
+
+    List<SearchResultItem> Results = new();
+
+    async Task RunSearch()
+    {
+        if (string.IsNullOrWhiteSpace(Query))
+            return;
+
+        IsLoading = true;
+        HasSearched = true;
+        Results.Clear();
+
+        try
+        {
+            Results = await _searchService.SearchAsync(TenantId, Query);
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+}
+
+
+@* @page "/search"
+@using MudBlazor
+@inject BizBot.Client.Services.SearchClientService _searchService
 
 <MudPaper Class="pa-4" Elevation="2">
     <MudText Typo="Typo.h4">Knowledge Search</MudText>
@@ -22,6 +111,7 @@
     string Result = "";
     async Task RunSearch()
     {
-        Result = await SearchService.SearchAsync(TenantId, Query);
+        Result = await _searchService.SearchAsync(TenantId, Query);
     }
 }
+ *@
