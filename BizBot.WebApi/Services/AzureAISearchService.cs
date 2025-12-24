@@ -41,9 +41,10 @@ namespace BizBot.WebApi.Services
                 var contextBuilder = new System.Text.StringBuilder();
                 await foreach (var result in results.Value.GetResultsAsync())
                 {
-                    if (result.Document.TryGetValue("content", out var content))
+                    if (result.Document.TryGetValue("content", out var contentObj)
+                        && contentObj is string contentText)
                     {
-                        contextBuilder.AppendLine($"• {content}");
+                        contextBuilder.AppendLine($"• {contentText}");
                     }
                 }
 

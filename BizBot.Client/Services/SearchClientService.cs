@@ -22,7 +22,8 @@ namespace BizBot.Client.Services
             { 
                 TenantId = tenantId, 
                 DocumentId = Guid.NewGuid().ToString(), 
-                Content = content, Title = title 
+                Content = content, 
+                Title = title 
             };
 
             var response = await _http.PostAsJsonAsync("api/search/index", doc);
