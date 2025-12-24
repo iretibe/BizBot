@@ -1,7 +1,5 @@
-﻿namespace BizBot.Client.Responses
+﻿namespace BizBot.WebApi.Responses
 {
-    //public record SearchResponse(string Context);
-
     public record SearchResultItem(string Content, string? Title);
 
     public record SearchResponse(List<SearchResultItem> Results);
