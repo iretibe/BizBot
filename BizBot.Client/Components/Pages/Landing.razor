@@ -1,0 +1,152 @@
+﻿@page "/"
+@rendermode InteractiveServer
+
+@layout EmptyLayout
+
+@using MudBlazor
+
+@inject NavigationManager _navManager
+@inject AuthenticationStateProvider _authProvider
+
+<PageTitle>BizBot – AI Business Assistant</PageTitle>
+
+<!-- HERO SECTION -->
+<MudContainer MaxWidth="MaxWidth.Large" Class="pt-16 pb-12">
+    <MudGrid AlignItems="Center" Spacing="6">
+
+        <!-- Left -->
+        <MudItem xs="12" md="6">
+            <MudText Typo="Typo.h2" GutterBottom>
+                BizBot 🤖
+            </MudText>
+
+            <MudText Typo="Typo.h6" Color="Color.Secondary" Class="mb-6">
+                Your AI-powered business assistant — chat smarter, search faster, grow better.
+            </MudText>
+
+            <MudStack Row Spacing="2">
+                <MudButton Size="Size.Large"
+                           Color="Color.Primary"
+                           Variant="Variant.Filled"
+                           OnClick="@GoToRegister">
+                    Get Started
+                </MudButton>
+
+                <MudButton Size="Size.Large"
+                           Color="Color.Primary"
+                           Variant="Variant.Outlined"
+                           OnClick="@GoToLogin">
+                    Login
+                </MudButton>
+            </MudStack>
+        </MudItem>
+
+        <!-- Right -->
+        <MudItem xs="12" md="6" Class="text-center">
+            <img src="images/landing-hero.svg"
+                 alt="BizBot AI Assistant"
+                 style="max-width:100%; height:auto;" />
+        </MudItem>
+
+    </MudGrid>
+</MudContainer>
+
+<!-- FEATURES -->
+<MudContainer MaxWidth="MaxWidth.Large" Class="pb-12">
+
+    <MudText Typo="Typo.h4" Align="Align.Center" Class="mb-6">
+        How BizBot Helps Your Business
+    </MudText>
+
+    <MudGrid Spacing="4">
+
+        <MudItem xs="12" md="4">
+            <MudPaper Elevation="2" Class="pa-6 text-center">
+                <MudIcon Icon="@Icons.Material.Filled.Chat"
+                         Size="Size.Large"
+                         Color="Color.Primary" />
+                <MudText Typo="Typo.h6" Class="mt-3">
+                    AI Chat Assistant
+                </MudText>
+                <MudText Typo="Typo.body2">
+                    Automate support, answer customers instantly, and boost productivity.
+                </MudText>
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" md="4">
+            <MudPaper Elevation="2" Class="pa-6 text-center">
+                <MudIcon Icon="@Icons.Material.Filled.Search"
+                         Size="Size.Large"
+                         Color="Color.Info" />
+                <MudText Typo="Typo.h6" Class="mt-3">
+                    Knowledge Search
+                </MudText>
+                <MudText Typo="Typo.body2">
+                    Upload documents and query them using natural language.
+                </MudText>
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" md="4">
+            <MudPaper Elevation="2" Class="pa-6 text-center">
+                <MudIcon Icon="@Icons.Material.Filled.Insights"
+                         Size="Size.Large"
+                         Color="Color.Success" />
+                <MudText Typo="Typo.h6" Class="mt-3">
+                    Business Insights
+                </MudText>
+                <MudText Typo="Typo.body2">
+                    Monitor usage, improve answers, and scale confidently.
+                </MudText>
+            </MudPaper>
+        </MudItem>
+
+    </MudGrid>
+</MudContainer>
+
+<!-- TRUST / CTA -->
+<MudContainer MaxWidth="MaxWidth.Medium" Class="pb-16 text-center">
+    <MudPaper Elevation="1" Class="pa-6">
+        <MudText Typo="Typo.h6">
+            🔒 Secure • ☁️ Cloud-based • ⚡ Fast
+        </MudText>
+        <MudText Typo="Typo.body2" Class="mt-2">
+            Built with enterprise-grade security and scalable infrastructure.
+        </MudText>
+    </MudPaper>
+</MudContainer>
+
+@code {
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await _authProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity?.IsAuthenticated == true)
+        {
+            _navManager.NavigateTo("/dashboard", replace: true);
+        }
+    }
+
+    private void GoToRegister()
+    {
+        _navManager.NavigateTo(
+            _navManager.GetUriWithQueryParameters(
+                "Account/Register",
+                new Dictionary<string, object?> { ["ReturnUrl"] = "/dashboard" }
+            )
+        );
+    }
+
+    private void GoToLogin()
+    {
+        _navManager.NavigateTo(
+            _navManager.GetUriWithQueryParameters(
+                "Account/Login",
+                new Dictionary<string, object?> { ["ReturnUrl"] = "/dashboard" }
+            )
+        );
+    }
+}

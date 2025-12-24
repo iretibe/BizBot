@@ -1,0 +1,51 @@
+﻿@using BizBot.Client.Services
+
+<div class="chat-box">
+    @foreach (var msg in Messages)
+    {
+        <div class="msg user">@msg.User</div>
+        <div class="msg bot">@msg.Bot</div>
+    }
+
+    <textarea @bind="CurrentMessage" @onkeydown="HandleEnter"></textarea>
+    <button class="btn btn-primary" @onclick="Send">Send</button>
+</div>
+
+@code {
+    [Inject] public ChatClientService ChatClient { get; set; } = default!;
+
+    public class ChatMessageUI
+    {
+        public string User { get; set; } = "";
+        public string Bot { get; set; } = "";
+    }
+
+    List<ChatMessageUI> Messages = new();
+    string CurrentMessage = "";
+    string? ConversationId = null;
+
+    [Parameter] public string TenantId { get; set; } = "sample-tenant";
+
+    private async Task Send()
+    {
+        if (string.IsNullOrWhiteSpace(CurrentMessage)) return;
+
+        var userMsg = CurrentMessage;
+        CurrentMessage = "";
+
+        Messages.Add(new() { User = userMsg });
+
+        var apiResponse = await ChatClient.SendMessageAsync(TenantId, userMsg, ConversationId);
+        if (apiResponse != null)
+        {
+            ConversationId = apiResponse.ConversationId;
+            Messages.Last().Bot = apiResponse.Message;
+        }
+    }
+
+    private async Task HandleEnter(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+            await Send();
+    }
+}

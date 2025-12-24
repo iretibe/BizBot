@@ -1,0 +1,118 @@
+﻿@page "/chat"
+@attribute [Authorize]
+
+@rendermode InteractiveServer
+
+@using BizBot.Client.Enums
+@using Microsoft.AspNetCore.Authorization
+@using MudBlazor
+@inject BizBot.Client.Services.ChatClientService _chatClient
+
+<MudPaper Class="pa-4" Elevation="2">
+
+    <MudText Typo="Typo.h5">Bot Preview</MudText>
+    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+        Test how your BizBot responds to user questions.
+    </MudText>
+
+    <MudTextField @bind-Value="Message"
+                  Placeholder="Ask something..."
+                  Variant="Variant.Outlined"
+                  FullWidth
+                  Immediate />
+
+    <MudButton Color="Color.Primary"
+               Variant="Variant.Filled"
+               Class="mt-2"
+               Disabled="@IsSending"
+               OnClick="Send">
+        @if (IsSending)
+        {
+            <MudProgressCircular Indeterminate Size="Size.Small" Class="me-2" />
+        }
+        Test Response
+    </MudButton>
+
+    @if (!string.IsNullOrWhiteSpace(Response))
+    {
+        <MudPaper Class="pa-3 mt-4">
+            <MudText Typo="Typo.subtitle2">BizBot says:</MudText>
+            <MudText Typo="Typo.body1">@Response</MudText>
+        </MudPaper>
+    }
+
+</MudPaper>
+
+@code {
+    private string Message = "";
+    private string? Response;
+    private bool IsSending;
+
+    async Task Send()
+    {
+        if (string.IsNullOrWhiteSpace(Message)) return;
+
+        IsSending = true;
+        Response = null;
+
+        var result = await _chatClient.SendMessageAsync(
+            tenantId: "tenant_123",
+            message: Message,
+            conversationId: null);
+
+        Response = result?.Message;
+        IsSending = false;
+    }
+}
+
+
+
+@* @page "/chat"
+@using MudBlazor
+@inject BizBot.Client.Services.ChatClientService ChatClient
+
+<MudPaper Class="pa-4" Elevation="2">
+    <MudText Typo="Typo.h4">BizBot Chat</MudText>
+    <MudDivider Class="my-2" />
+    <MudTextField @bind-Value="Message" Label="Type a message…" Variant="Variant.Filled" FullWidth="true" Immediate="true" />
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SendMessage" Class="mt-2">Send</MudButton>
+
+    <MudDivider Class="my-3" />
+
+    <MudScrollArea Height="400px">
+        <MudList T="ChatMsg" Dense="true">
+            @foreach (var msg in ChatHistory)
+            {
+                <MudListItem T="ChatMsg">
+                    <MudPaper Class="pa-3 mb-2" Width="100%">
+                        <MudText Color="Color.Primary"><b>You:</b> @msg.User</MudText>
+                        <MudText Color="Color.Secondary"><b>Bot:</b> @msg.Bot</MudText>
+                    </MudPaper>
+                </MudListItem>
+            }
+        </MudList>
+    </MudScrollArea>
+</MudPaper>
+
+@code {
+    string TenantId = "tenant_123";
+    string Message = "";
+    string? ConversationId;
+
+    public class ChatMsg { public string User { get; set; } = ""; public string Bot { get; set; } = ""; }
+    List<ChatMsg> ChatHistory = new();
+
+    async Task SendMessage()
+    {
+        if (string.IsNullOrWhiteSpace(Message)) return;
+        var userMsg = Message;
+        Message = "";
+        var response = await ChatClient.SendMessageAsync(TenantId, userMsg, ConversationId);
+        if (response != null)
+        {
+            ConversationId = response.ConversationId;
+            ChatHistory.Add(new ChatMsg { User = userMsg, Bot = response.Message });
+        }
+    }
+}
+ *@

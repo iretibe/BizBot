@@ -1,0 +1,18 @@
+﻿@using MudBlazor
+
+<MudThemeProvider Theme="@BizBotTheme" />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+@code {
+    public MudTheme BizBotTheme = new MudTheme()
+    {
+        PaletteLight = new PaletteLight()
+        {
+            Primary = Colors.Blue.Default,
+            Secondary = Colors.DeepPurple.Accent2,
+            Background = "#F5F7FA",
+            Surface = "#FFFFFF"
+        }
+    };
+}
