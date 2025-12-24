@@ -1,0 +1,27 @@
+﻿@page "/search"
+@using MudBlazor
+@inject BizBot.Client.Services.SearchClientService SearchService
+
+<MudPaper Class="pa-4" Elevation="2">
+    <MudText Typo="Typo.h4">Knowledge Search</MudText>
+    <MudDivider />
+    <MudTextField @bind-Value="Query" Label="Ask your question…" FullWidth="true" />
+    <MudButton OnClick="RunSearch" Color="Color.Primary" Variant="Variant.Filled" Class="mt-3">Search</MudButton>
+
+    @if (!string.IsNullOrEmpty(Result))
+    {
+        <MudPaper Elevation="1" Class="pa-3 mt-4">
+            <MudText>@Result</MudText>
+        </MudPaper>
+    }
+</MudPaper>
+
+@code {
+    string TenantId = "tenant_123";
+    string Query = "";
+    string Result = "";
+    async Task RunSearch()
+    {
+        Result = await SearchService.SearchAsync(TenantId, Query);
+    }
+}

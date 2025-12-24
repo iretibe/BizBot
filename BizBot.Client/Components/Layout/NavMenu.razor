@@ -1,0 +1,45 @@
+﻿@using BizBot.Client.Data
+@using Microsoft.AspNetCore.Identity
+@using MudBlazor
+
+@inject SignInManager<ApplicationUser> _signInManager
+@inject NavigationManager _navManager
+
+<MudNavMenu>
+
+    <MudNavLink Href="/dashboard" Icon="@Icons.Material.Filled.Home">
+        Home
+    </MudNavLink>
+
+    <MudNavLink Href="/chat" Icon="@Icons.Material.Filled.Chat">
+        Chat
+    </MudNavLink>
+
+    <MudNavLink Href="/search" Icon="@Icons.Material.Filled.Search">
+        Search
+    </MudNavLink>
+
+    <MudNavLink Href="/subscriptions" Icon="@Icons.Material.Filled.CreditCard">
+        Subscriptions
+    </MudNavLink>
+
+    <MudDivider Class="my-2" />
+
+    <AuthorizeView>
+        <Authorized>
+            <MudNavLink OnClick="@Logout"
+                        Icon="@Icons.Material.Filled.Logout">
+                Logout
+            </MudNavLink>
+        </Authorized>
+    </AuthorizeView>
+
+</MudNavMenu>
+
+@code {
+    private async Task Logout()
+    {
+        await _signInManager.SignOutAsync();
+        _navManager.NavigateTo("/", forceLoad: true);
+    }
+}

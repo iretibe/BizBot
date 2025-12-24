@@ -1,0 +1,139 @@
+﻿@page "/Account/Register"
+
+@rendermode InteractiveServer
+
+@using System.ComponentModel.DataAnnotations
+@using System.Text
+@using System.Text.Encodings.Web
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.AspNetCore.WebUtilities
+@using BizBot.Admin.Data
+@using MudBlazor
+
+@inject UserManager<ApplicationUser> UserManager
+@inject IUserStore<ApplicationUser> UserStore
+@inject SignInManager<ApplicationUser> SignInManager
+@inject IEmailSender<ApplicationUser> EmailSender
+@inject ILogger<Register> Logger
+@inject NavigationManager NavigationManager
+@inject IdentityRedirectManager RedirectManager
+
+<PageTitle>Admin Register</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Small" Class="d-flex align-center justify-center" Style="min-height:100vh">
+    <MudPaper Elevation="6" Class="pa-6" Width="100%">
+
+        <MudText Typo="Typo.h5" Align="Align.Center" Class="mb-4">
+            Admin Registration
+        </MudText>
+
+        <MudForm @ref="form" Model="@Input">
+
+            <MudTextField T="string"
+                          Label="Email"
+                          @bind-Value="Input.Email"
+                          Required="true"
+                          RequiredError="Email is required"
+                          Variant="Variant.Outlined"
+                          FullWidth />
+
+            <MudTextField T="string"
+                          Label="Password"
+                          @bind-Value="Input.Password"
+                          InputType="InputType.Password"
+                          Required="true"
+                          RequiredError="Password is required"
+                          Variant="Variant.Outlined"
+                          FullWidth />
+
+            <MudTextField T="string"
+                          Label="Confirm Password"
+                          @bind-Value="Input.ConfirmPassword"
+                          InputType="InputType.Password"
+                          Required="true"
+                          RequiredError="Confirm password is required"
+                          Variant="Variant.Outlined"
+                          FullWidth />
+
+            <MudButton Color="Color.Primary"
+                       Variant="Variant.Filled"
+                       FullWidth
+                       Class="mt-4"
+                       OnClick="RegisterUser">
+                Register
+            </MudButton>
+
+            @if (identityErrors != null)
+            {
+                <MudAlert Severity="Severity.Error" Class="mt-3">
+                    @foreach (var error in identityErrors)
+                    {
+                        <div>@error.Description</div>
+                    }
+                </MudAlert>
+            }
+
+        </MudForm>
+    </MudPaper>
+</MudContainer>
+
+@code {
+    private MudForm? form;
+    private InputModel Input = new();
+    private IEnumerable<IdentityError>? identityErrors;
+
+    private async Task RegisterUser()
+    {
+        await form!.Validate();
+
+        if (!form.IsValid)
+            return;
+
+        if (Input.Password != Input.ConfirmPassword)
+        {
+            identityErrors = new[]
+            {
+                new IdentityError { Description = "Passwords do not match." }
+            };
+            return;
+        }
+
+        var user = CreateUser();
+
+        await UserStore.SetUserNameAsync(user, Input.Email, CancellationToken.None);
+        await GetEmailStore().SetEmailAsync(user, Input.Email, CancellationToken.None);
+
+        var result = await UserManager.CreateAsync(user, Input.Password);
+
+        if (!result.Succeeded)
+        {
+            identityErrors = result.Errors;
+            return;
+        }
+
+        // Assign roles
+        var superAdmins = await UserManager.GetUsersInRoleAsync("SuperAdmin");
+        await UserManager.AddToRoleAsync(user, superAdmins.Any() ? "Admin" : "SuperAdmin");
+
+        Logger.LogInformation("Admin user created.");
+
+        RedirectManager.RedirectTo(
+            "Account/RegisterConfirmation",
+            new() { ["email"] = Input.Email }
+        );
+    }
+
+    private ApplicationUser CreateUser()
+        => Activator.CreateInstance<ApplicationUser>()
+           ?? throw new InvalidOperationException("Failed to create user.");
+
+    private IUserEmailStore<ApplicationUser> GetEmailStore()
+        => (IUserEmailStore<ApplicationUser>)UserStore;
+
+    private sealed class InputModel
+    {
+        public string Email { get; set; } = "";
+        public string Password { get; set; } = "";
+        public string ConfirmPassword { get; set; } = "";
+    }
+}

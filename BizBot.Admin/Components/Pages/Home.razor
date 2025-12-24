@@ -1,0 +1,36 @@
+﻿@page "/"
+@attribute [Authorize(Roles = "Admin,SuperAdmin")]
+@using Microsoft.AspNetCore.Authorization
+@using MudBlazor
+
+<MudText Typo="Typo.h4" Class="mb-4">Admin Dashboard</MudText>
+
+<MudGrid Spacing="3">
+    <MudItem xs="12" sm="6" md="3">
+        <MudPaper Class="pa-4">
+            <MudText Typo="Typo.caption">Total Customers</MudText>
+            <MudText Typo="Typo.h4">1,248</MudText>
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" sm="6" md="3">
+        <MudPaper Class="pa-4">
+            <MudText Typo="Typo.caption">Active Subscriptions</MudText>
+            <MudText Typo="Typo.h4">842</MudText>
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" sm="6" md="3">
+        <MudPaper Class="pa-4">
+            <MudText Typo="Typo.caption">Monthly Revenue</MudText>
+            <MudText Typo="Typo.h4">$32,940</MudText>
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" sm="6" md="3">
+        <MudPaper Class="pa-4">
+            <MudText Typo="Typo.caption">Churn Rate</MudText>
+            <MudText Typo="Typo.h4">2.4%</MudText>
+        </MudPaper>
+    </MudItem>
+</MudGrid>

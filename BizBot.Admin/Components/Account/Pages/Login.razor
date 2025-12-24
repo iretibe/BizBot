@@ -1,0 +1,172 @@
+﻿@page "/Account/Login"
+
+@using System.ComponentModel.DataAnnotations
+@using BizBot.Admin.Data
+@using Microsoft.AspNetCore.Authentication
+@using Microsoft.AspNetCore.Identity
+
+@inject UserManager<ApplicationUser> UserManager
+@inject SignInManager<ApplicationUser> SignInManager
+@inject ILogger<Login> Logger
+@inject NavigationManager NavigationManager
+@inject IdentityRedirectManager RedirectManager
+
+<PageTitle>BizBot | Admin Login</PageTitle>
+
+<div class="auth-container">
+    <div class="auth-card">
+
+        <h2 class="auth-title">Admin Login</h2>
+
+        <StatusMessage Message="@errorMessage" />
+
+        <EditForm EditContext="editContext" method="post" OnSubmit="LoginUser" FormName="login">
+            <DataAnnotationsValidator />
+            <ValidationSummary class="text-danger" role="alert" />
+
+            <div class="form-group">
+                <label>Email</label>
+                <InputText @bind-Value="Input.Email"
+                           class="form-control"
+                           autocomplete="username"
+                           placeholder="name@example.com" />
+                <ValidationMessage For="() => Input.Email" />
+            </div>
+
+            <div class="form-group">
+                <label>Password</label>
+                <InputText type="password"
+                           @bind-Value="Input.Password"
+                           class="form-control"
+                           autocomplete="current-password"
+                           placeholder="••••••••" />
+                <ValidationMessage For="() => Input.Password" />
+            </div>
+
+            <div class="form-check">
+                <InputCheckbox @bind-Value="Input.RememberMe" class="form-check-input" />
+                <label class="form-check-label">Remember me</label>
+            </div>
+
+            <button type="submit" class="btn-primary w-100 mt-3">
+                Log in
+            </button>
+
+            <div class="divider">
+                <span>OR</span>
+            </div>
+
+            <PasskeySubmit Operation="PasskeyOperation.Request"
+                           Name="Input.Passkey"
+                           EmailName="Input.Email"
+                           class="btn-link">
+                Log in with a passkey
+            </PasskeySubmit>
+
+            <div class="auth-links">
+                <a href="Account/ForgotPassword">Forgot your password?</a>
+                @* <a href="@(NavigationManager.GetUriWithQueryParameters("Account/Register",
+                                       new Dictionary<string, object?> { ["ReturnUrl"] = ReturnUrl }))">
+                    Register
+                </a>
+                <a href="Account/ResendEmailConfirmation">
+                    Resend confirmation
+                </a> *@
+            </div>
+
+        </EditForm>
+
+    </div>
+</div>
+
+@code {
+    private string? errorMessage;
+    private EditContext editContext = default!;
+
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    [SupplyParameterFromForm]
+    private InputModel Input { get; set; } = default!;
+
+    [SupplyParameterFromQuery]
+    private string? ReturnUrl { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        Input ??= new();
+
+        editContext = new EditContext(Input);
+
+        if (HttpMethods.IsGet(HttpContext.Request.Method))
+        {
+            // Clear the existing external cookie to ensure a clean login process
+            await HttpContext.SignOutAsync(IdentityConstants.ExternalScheme);
+        }
+    }
+
+    public async Task LoginUser()
+    {
+        if (!string.IsNullOrEmpty(Input.Passkey?.Error))
+        {
+            errorMessage = $"Error: {Input.Passkey.Error}";
+            return;
+        }
+
+        SignInResult result;
+        if (!string.IsNullOrEmpty(Input.Passkey?.CredentialJson))
+        {
+            // When performing passkey sign-in, don't perform form validation.
+            result = await SignInManager.PasskeySignInAsync(Input.Passkey.CredentialJson);
+        }
+        else
+        {
+            // If doing a password sign-in, validate the form.
+            if (!editContext.Validate())
+            {
+                return;
+            }
+
+            // This doesn't count login failures towards account lockout
+            // To enable password failures to trigger account lockout, set lockoutOnFailure: true
+            result = await SignInManager.PasswordSignInAsync(Input.Email, Input.Password, Input.RememberMe, lockoutOnFailure: false);
+        }
+
+        if (result.Succeeded)
+        {
+            Logger.LogInformation("User logged in.");
+            RedirectManager.RedirectTo(ReturnUrl);
+        }
+        else if (result.RequiresTwoFactor)
+        {
+            RedirectManager.RedirectTo(
+                "Account/LoginWith2fa",
+                new() { ["returnUrl"] = ReturnUrl, ["rememberMe"] = Input.RememberMe });
+        }
+        else if (result.IsLockedOut)
+        {
+            Logger.LogWarning("User account locked out.");
+            RedirectManager.RedirectTo("Account/Lockout");
+        }
+        else
+        {
+            errorMessage = "Error: Invalid login attempt.";
+        }
+    }
+
+    private sealed class InputModel
+    {
+        [Required]
+        [EmailAddress]
+        public string Email { get; set; } = "";
+
+        [Required]
+        [DataType(DataType.Password)]
+        public string Password { get; set; } = "";
+
+        [Display(Name = "Remember me?")]
+        public bool RememberMe { get; set; }
+
+        public PasskeyInputModel? Passkey { get; set; }
+    }
+}

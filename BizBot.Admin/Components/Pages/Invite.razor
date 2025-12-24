@@ -1,0 +1,49 @@
+﻿@page "/invite"
+@using Microsoft.AspNetCore.Authorization
+@using MudBlazor
+@* @attribute [Authorize(Roles = "Admin")] *@
+
+<MudPaper Class="pa-6" MaxWidth="400px">
+    <MudText Typo="Typo.h6" Class="mb-4">
+        Invite Admin
+    </MudText>
+
+    <MudForm @ref="_form">
+        <MudTextField @bind-Value="email"
+                      Label="Admin Email"
+                      Required
+                      Variant="Variant.Outlined"
+                      FullWidth />
+
+        <MudButton Color="Color.Primary"
+                   Variant="Variant.Filled"
+                   FullWidth
+                   Class="mt-4"
+                   OnClick="SendInvite">
+            Send Invite
+        </MudButton>
+
+        @if (!string.IsNullOrWhiteSpace(message))
+        {
+            <MudAlert Severity="Severity.Info" Class="mt-4">
+                @message
+            </MudAlert>
+        }
+    </MudForm>
+</MudPaper>
+
+@code {
+    private MudForm _form = default!;
+    private string email = string.Empty;
+    private string? message;
+
+    private async Task SendInvite()
+    {
+        await _form.Validate();
+        if (!_form.IsValid)
+            return;
+
+        // Phase 2: Generate token + email
+        message = $"Invite sent to {email}";
+    }
+}

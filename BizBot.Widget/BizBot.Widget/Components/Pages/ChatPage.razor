@@ -1,0 +1,79 @@
+﻿@* @page "/"
+@inject HttpClient Http
+@inject NavigationManager _navManager
+
+<h3>BizBot Assistant</h3>
+<hr />
+
+<div id="messages-area" style="height:300px; overflow-y:auto; border:1px solid #ddd; padding:10px; border-radius:6px;">
+    @foreach (var m in Messages)
+    {
+        <div><b>You:</b> @m.User</div>
+        <div><b>Bot:</b> @m.Bot</div>
+        <hr />
+    }
+</div>
+
+<input @bind="Message"
+       placeholder="Ask something…"
+       class="form-control mt-2" />
+
+<button class="btn btn-primary mt-2" @onclick="SendMessage">Send</button>
+
+@code {
+    string Message = "";
+    string? TenantId;
+    string? ConversationId;
+
+    public class ChatMsg { public string User = ""; public string Bot = ""; }
+    List<ChatMsg> Messages = new();
+
+    // protected override async Task OnInitializedAsync()
+    // {
+    //     var uri = new Uri(_navManager.Uri);
+    //     var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
+    //     TenantId = query["tenant"];
+    // }
+
+    protected override async Task OnInitializedAsync()
+    {
+        var uri = new Uri(_navManager.Uri);
+        var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
+
+        TenantId = query["tenant"];
+        var welcomeMsg = query["welcome"];
+
+        if (!string.IsNullOrWhiteSpace(welcomeMsg))
+        {
+            Messages.Add(new ChatMsg { User = "", Bot = welcomeMsg });
+        }
+    }
+
+    async Task SendMessage()
+    {
+        if (string.IsNullOrWhiteSpace(Message)) return;
+
+        var userText = Message;
+        Message = "";
+
+        var payload = new
+        {
+            tenant_id = TenantId,
+            message = userText,
+            conversation_id = ConversationId
+        };
+
+        var result = await Http.PostAsJsonAsync("/api/chat/send", payload);
+        var json = await result.Content.ReadFromJsonAsync<Response>();
+
+        ConversationId = json?.ConversationId;
+        Messages.Add(new ChatMsg { User = userText, Bot = json?.Message! });
+    }
+
+    public class Response
+    {
+        public string? ConversationId { get; set; }
+        public string? Message { get; set; }
+    }
+}
+ *@

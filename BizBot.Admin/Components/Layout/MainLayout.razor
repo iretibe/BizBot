@@ -1,0 +1,49 @@
+﻿@inherits LayoutComponentBase
+@using MudBlazor
+@inject NavigationManager NavigationManager
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+@if (ShowLayout)
+{
+    <MudLayout>
+
+        <MudAppBar Color="Color.Primary" Elevation="1">
+            <MudText Typo="Typo.h6">BizBot Admin</MudText>
+            <MudSpacer />
+            <MudButton Variant="Variant.Text" Color="Color.Inherit">
+                Logout
+            </MudButton>
+        </MudAppBar>
+
+        <MudDrawer Open="true"
+                   Variant="DrawerVariant.Persistent"
+                   Elevation="1"
+                   Width="240px">
+            <NavMenu />
+        </MudDrawer>
+
+        <MudMainContent Class="mt-15 pa-4">
+            @Body
+        </MudMainContent>
+
+    </MudLayout>
+}
+else
+{
+    @Body
+}
+
+@code {
+    private bool ShowLayout = true;
+
+    protected override void OnInitialized()
+    {
+        var uri = NavigationManager.Uri.ToLowerInvariant();
+
+        ShowLayout =
+            !uri.Contains("/account/login") &&
+            !uri.Contains("/account/register") &&
+            !uri.Contains("/account/forgotpassword") &&
+            !uri.Contains("/account/resetpassword");
+    }
+}

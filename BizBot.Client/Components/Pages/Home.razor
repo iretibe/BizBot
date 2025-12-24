@@ -1,0 +1,152 @@
+﻿@page "/dashboard"
+@attribute [Authorize]
+
+@using BizBot.Client.Components.Reusables
+@using Microsoft.AspNetCore.Authorization
+@using MudBlazor
+
+@inject NavigationManager Nav
+
+<PageTitle>BizBot Dashboard</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="pa-6">
+
+    <!-- HERO -->
+    <MudPaper Elevation="0" Class="hero pa-6 mb-8 rounded-xl">
+        <MudText Typo="Typo.h3" Class="text-white mb-1">
+            Welcome to BizBot 🤖
+        </MudText>
+
+        <MudText Typo="Typo.body1" Class="text-white opacity-90">
+            Your AI-powered business assistant — chat smarter, search faster, grow better.
+        </MudText>
+
+        <MudStack Row Spacing="2" Class="mt-4">
+            @foreach (var action in HeroActions)
+            {
+                <MudButton Variant="@action.Variant"
+                           Color="@action.Color"
+                           OnClick="@(() => Navigate(action.Route))">
+                    @action.Text
+                </MudButton>
+            }
+        </MudStack>
+    </MudPaper>
+
+    <!-- PRIMARY ACTIONS -->
+    <MudGrid Spacing="3" Class="mb-8">
+        @foreach (var card in DashboardCards)
+        {
+            <MudItem xs="12" md="4">
+                <DashboardCard Icon="@card.Icon"
+                               Title="@card.Title"
+                               Description="@card.Description"
+                               Color="@card.Color"
+                               OnClick="@(() => Navigate(card.Route))" />
+            </MudItem>
+        }
+    </MudGrid>
+
+    <!-- SYSTEM STATUS -->
+    <MudPaper Elevation="1" Class="pa-4 mb-6">
+        <MudStack Row AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+            <MudText Typo="Typo.h6">System Status</MudText>
+
+            <MudChip T="string" Color="Color.Success" Size="Size.Small">
+                All systems operational
+            </MudChip>
+        </MudStack>
+
+        <MudList T="string" Dense Class="mt-3">
+            @foreach (var service in SystemServices)
+            {
+                <MudListItem>
+                    <ItemIcon>
+                        <MudIcon Icon="@Icons.Material.Filled.CheckCircle"
+                                 Color="Color.Success" />
+                    </ItemIcon>
+                    @service
+                </MudListItem>
+            }
+        </MudList>
+    </MudPaper>
+
+    <!-- QUICK TIPS -->
+    <MudPaper Elevation="1" Class="pa-4">
+        <MudText Typo="Typo.h6" Class="mb-2">Quick Tips</MudText>
+
+        <MudList T="string" Dense>
+            @foreach (var tip in Tips)
+            {
+                <MudListItem>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">
+                        • @tip
+                    </MudText>
+                </MudListItem>
+            }
+        </MudList>
+    </MudPaper>
+
+</MudContainer>
+
+<style>
+.hero {
+    background: linear-gradient(135deg, #5b2cff 0%, #805ad5 100%);
+}
+</style>
+
+@code {
+
+    /* ------------------------------
+     * Hero Actions
+     * ------------------------------ */
+    private readonly List<HeroAction> HeroActions =
+    [
+        new("Start Chat", "/chat", Color.Primary, Variant.Filled),
+        new("Search Knowledge", "/search", Color.Secondary, Variant.Outlined)
+    ];
+
+    /* ------------------------------
+     * Dashboard Cards
+     * ------------------------------ */
+    private readonly List<DashboardCardModel> DashboardCards =
+    [
+        new(Icons.Material.Filled.Chat, "Chat", "Talk to your AI assistant", "/chat", Color.Primary),
+        new(Icons.Material.Filled.Search, "Knowledge Base", "Search & upload documents", "/search", Color.Info),
+        new(Icons.Material.Filled.Subscriptions, "Subscription", "View or upgrade your plan", "/subscription", Color.Warning)
+    ];
+
+    /* ------------------------------
+     * System Status (future API-ready)
+     * ------------------------------ */
+    private readonly string[] SystemServices =
+    [
+        "API Service",
+        "AI Engine",
+        "Search Index"
+    ];
+
+    /* ------------------------------
+     * Tips
+     * ------------------------------ */
+    private readonly string[] Tips =
+    [
+        "Upload documents to improve AI answers",
+        "Upgrade your plan for higher limits",
+        "Use analytics to track usage (coming soon)"
+    ];
+
+    private void Navigate(string route) => Nav.NavigateTo(route);
+
+    /* ------------------------------
+     * Small record models
+     * ------------------------------ */
+    private record HeroAction(string Text, string Route, Color Color, Variant Variant);
+
+    private record DashboardCardModel(
+        string Icon,
+        string Title,
+        string Description,
+        string Route,
+        Color Color);
+}

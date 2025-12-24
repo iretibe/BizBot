@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/Solution Items/">
+    <File Path=".editorconfig" />
+  </Folder>
+  <Project Path="BizBot.Admin/BizBot.Admin.csproj" Id="1f4cedee-1fbc-4d25-a4a9-1dc70bc8e698" />
+  <Project Path="BizBot.Client/BizBot.Client.csproj" Id="051bd46f-cca1-46cc-803a-f33004104099" />
+  <Project Path="BizBot.Web/BizBot.Web.csproj" Id="25357969-cae6-4f5e-97e8-c0128a639a90" />
+  <Project Path="BizBot.WebApi/BizBot.WebApi.csproj" Id="fcb018d7-e039-4292-96e4-2d986d3cc5b8" />
+  <Project Path="BizBot.Widget/BizBot.Widget.Client/BizBot.Widget.Client.csproj" Id="fbede634-4099-4894-b6a6-2914747f400d" />
+  <Project Path="BizBot.Widget/BizBot.Widget/BizBot.Widget.csproj" Id="c0957945-93f0-4e4b-a903-070df147d258" />
+</Solution>

@@ -1,0 +1,92 @@
+﻿@page "/customers"
+@using BizBot.Admin.Models
+@using Microsoft.AspNetCore.Authorization
+@using MudBlazor
+@* @attribute [Authorize(Roles = "Admin")] *@
+
+<MudText Typo="Typo.h5" Class="mb-4">
+    Customers
+</MudText>
+
+<MudPaper Class="pa-4">
+
+    <MudTable Items="customers"
+              Dense="true"
+              Hover="true"
+              Bordered="true"
+              Loading="customers == null">
+
+        <HeaderContent>
+            <MudTh>Name</MudTh>
+            <MudTh>Email</MudTh>
+            <MudTh>Plan</MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh>Created</MudTh>
+            <MudTh Align="right">Actions</MudTh>
+        </HeaderContent>
+
+        <RowTemplate>
+            <MudTd>@context.FirstName @context.LastName</MudTd>
+            <MudTd>@context.Email</MudTd>
+            <MudTd>@context.Plan</MudTd>
+
+            <MudTd>
+                <MudChip T="string"
+                         Color="@(context.IsActive ? Color.Success : Color.Error)"
+                         Size="Size.Small">
+                    @(context.IsActive ? "Active" : "Disabled")
+                </MudChip>
+            </MudTd>
+
+            <MudTd>@context.CreatedAt.ToShortDateString()</MudTd>
+
+            <MudTd Align="right">
+                <MudMenu Dense="true">
+                    <ActivatorContent>
+                        <MudIconButton Icon="@Icons.Material.Filled.MoreVert" />
+                    </ActivatorContent>
+
+                    <ChildContent>
+                        <MudMenuItem OnClick="@(() => View(context.Id))">
+                            View
+                        </MudMenuItem>
+
+                        <MudMenuItem OnClick="@(() => Edit(context.Id))">
+                            Edit
+                        </MudMenuItem>
+
+                        <MudMenuItem OnClick="@(() => Toggle(context.Id))">
+                            @(context.IsActive ? "Disable" : "Enable")
+                        </MudMenuItem>
+                    </ChildContent>
+                </MudMenu>
+            </MudTd>
+        </RowTemplate>
+
+    </MudTable>
+
+</MudPaper>
+
+@code {
+    private List<CustomerDto>? customers;
+
+    [Inject] HttpClient Http { get; set; } = default!;
+    [Inject] NavigationManager Nav { get; set; } = default!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        customers = await Http.GetFromJsonAsync<List<CustomerDto>>("/api/customers");
+    }
+
+    private void View(Guid id) =>
+        Nav.NavigateTo($"/customers/{id}");
+
+    private void Edit(Guid id) =>
+        Nav.NavigateTo($"/customers/{id}/edit");
+
+    private Task Toggle(Guid id)
+    {
+        // Phase 2: API toggle
+        return Task.CompletedTask;
+    }
+}

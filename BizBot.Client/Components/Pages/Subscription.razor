@@ -1,0 +1,107 @@
+﻿@page "/subscriptions"
+@using MudBlazor
+@inject BizBot.Client.Services.SubscriptionClientService SubClient
+
+<MudPaper Class="pa-4" Elevation="2">
+    <MudText Typo="Typo.h4">Choose a Subscription Plan</MudText>
+
+    <MudSelect @bind-Value="Plan"
+               Label="Select a plan"
+               FullWidth="true">
+
+        <MudSelectItem Value="@("starter")">
+            Starter – $29
+        </MudSelectItem>
+
+        <MudSelectItem Value="@("pro")">
+            Pro – $99
+        </MudSelectItem>
+
+        <MudSelectItem Value="@("agency")">
+            Agency – $299
+        </MudSelectItem>
+
+    </MudSelect>
+
+    <MudTextField @bind-Value="Email"
+                  Label="Email"
+                  FullWidth="true"
+                  Class="mt-3" />
+
+    <MudTextField @bind-Value="Name"
+                  Label="Name"
+                  FullWidth="true"
+                  Class="mt-2" />
+
+    <MudButton OnClick="Subscribe"
+               Color="Color.Primary"
+               Variant="Variant.Filled"
+               Class="mt-4">
+        Subscribe
+    </MudButton>
+
+    @if (!string.IsNullOrEmpty(CheckoutUrl))
+    {
+        <MudAlert Severity="Severity.Info" Class="mt-3">
+            <a href="@CheckoutUrl" target="_blank">
+                Click here to continue to payment
+            </a>
+        </MudAlert>
+    }
+</MudPaper>
+
+@code {
+    string Plan = "starter";
+    string Email = "";
+    string Name = "";
+    string CheckoutUrl = "";
+
+    async Task Subscribe()
+    {
+        var init = await SubClient.InitializeAsync(Plan, Email, Name);
+        if (init != null)
+            CheckoutUrl = init.AuthorizationUrl;
+    }
+}
+
+
+
+@* @page "/subscriptions"
+@using MudBlazor
+@inject BizBot.Client.Services.SubscriptionClientService SubClient
+
+<MudPaper Class="pa-4" Elevation="2">
+    <MudText Typo="Typo.h4">Choose a Subscription Plan</MudText>
+
+    <MudSelect @bind-Value="Plan" Label="Plan">
+        <MudSelectItem Value="@("starter")">Starter - $29</MudSelectItem>
+        <MudSelectItem Value="@("pro")">Pro - $99</MudSelectItem>
+        <MudSelectItem Value="@("agency")">Agency - $299</MudSelectItem>
+    </MudSelect>
+
+    <MudTextField @bind-Value="Email" Label="Email" FullWidth="true" />
+    <MudTextField @bind-Value="Name" Label="Name" FullWidth="true" />
+
+    <MudButton OnClick="Subscribe" Color="Color.Primary" Class="mt-3">Subscribe</MudButton>
+
+    @if (!string.IsNullOrEmpty(CheckoutUrl))
+    {
+        <MudAlert Severity="Severity.Info" Class="mt-3">
+            <a href="@CheckoutUrl" target="_blank">Click here to continue to payment</a>
+        </MudAlert>
+    }
+</MudPaper>
+
+@code {
+    string Plan = "starter";
+    string Email = "";
+    string Name = "";
+    string CheckoutUrl = "";
+    async Task Subscribe()
+    {
+        var init = await SubClient.InitializeAsync(Plan, Email, Name);
+        if (init != null)
+            CheckoutUrl = init.AuthorizationUrl;
+    }
+}
+ *@

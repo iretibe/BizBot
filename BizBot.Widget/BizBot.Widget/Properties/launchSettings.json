@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json.schemastore.org/launchsettings.json",
+  "profiles": {
+    "BizBot.Widget": {
+      "commandName": "Project",
+      "dotnetRunMessages": true,
+      "launchBrowser": true,
+      "inspectUri": "{wsProtocol}://localhost:{url.port}/_framework/debug/ws-proxy?browser={browserInspectUri}",
+      "applicationUrl": "https://localhost:7112;http://localhost:5236",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      }
+    }
+  }
+}
+
+
+//{
+//  "$schema": "https://json.schemastore.org/launchsettings.json",
+//    "profiles": {
+//      "http": {
+//        "commandName": "Project",
+//        "dotnetRunMessages": true,
+//        "launchBrowser": true,
+//        "inspectUri": "{wsProtocol}://{url.hostname}:{url.port}/_framework/debug/ws-proxy?browser={browserInspectUri}",
+//        "applicationUrl": "http://bizbot_widget.dev.localhost:5236",
+//        "environmentVariables": {
+//          "ASPNETCORE_ENVIRONMENT": "Development"
+//        }
+//      },
+//      "https": {
+//        "commandName": "Project",
+//        "dotnetRunMessages": true,
+//        "launchBrowser": true,
+//        "inspectUri": "{wsProtocol}://{url.hostname}:{url.port}/_framework/debug/ws-proxy?browser={browserInspectUri}",
+//        "applicationUrl": "https://bizbot_widget.dev.localhost:7112;http://bizbot_widget.dev.localhost:5236",
+//        "environmentVariables": {
+//          "ASPNETCORE_ENVIRONMENT": "Development"
+//        }
+//      }
+//    }
+//  }

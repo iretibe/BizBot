@@ -1,0 +1,27 @@
+﻿@page "/index-document"
+@using MudBlazor
+@inject BizBot.Client.Services.SearchClientService SearchClient
+
+<MudPaper Class="pa-4" Elevation="2">
+    <MudText Typo="Typo.h5">Index Knowledge Document</MudText>
+    <MudTextField @bind-Value="Title" Label="Title" FullWidth="true" />
+    <MudTextField @bind-Value="Content" Label="Content" FullWidth="true" Lines="6" />
+    <MudButton OnClick="IndexDoc" Color="Color.Primary" Variant="Variant.Filled" Class="mt-3">Index Document</MudButton>
+
+    @if (Indexed)
+    {
+        <MudAlert Severity="Severity.Success" Class="mt-3">Document Indexed Successfully!</MudAlert>
+    }
+</MudPaper>
+
+@code {
+    string TenantId = "tenant_123";
+    string Title = "";
+    string Content = "";
+    bool Indexed = false;
+
+    async Task IndexDoc()
+    {
+        Indexed = await SearchClient.IndexAsync(TenantId, Content, Title);
+    }
+}
