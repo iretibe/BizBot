@@ -1,5 +1,6 @@
 using BizBot.WebApi.Endpoints;
 using BizBot.WebApi.Helpers;
+using BizBot.WebApi.Interfaces;
 using BizBot.WebApi.Services;
 using Microsoft.Azure.Cosmos;
 
@@ -42,6 +43,8 @@ builder.Services.AddSingleton(provider =>
 builder.Services.AddSingleton<CosmosDbService>();
 
 builder.Services.AddHttpClient();
+
+builder.Services.AddHttpClient<IExchangeRateService, ExchangeRateService>();
 
 // Register CosmosDbService as singleton so InitializeAsync configures the single instance used by all requests
 builder.Services.AddScoped<OpenAIService>();

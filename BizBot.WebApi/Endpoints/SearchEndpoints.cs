@@ -23,18 +23,20 @@ namespace BizBot.WebApi.Endpoints
             }).WithName("IndexDocument");
 
             group.MapGet("/search/{tenantId}", async (
-                string tenantId,
-                [FromQuery] string query,
+                string tenantId, [FromQuery] string query,
                 [FromServices] AzureAISearchService searchService) =>
             {
-                var context = await searchService.SearchRelevantContextSimpleAsync(query, tenantId);
+                //var context = await searchService.SearchRelevantContextSimpleAsync(query, tenantId);
+                var chunks = await searchService.SearchRelevantChunksAsync(query, tenantId);
 
-                //return Results.Ok(new { context });
+                if (chunks == null || !chunks.Any())
+                {
+                    // Return a specific response immediately
+                    return Results.Ok(new SearchResponse(new List<SearchResultItem>()));
+                }
+
                 return Results.Ok(new SearchResponse(
-                    context
-                        .Split("•", StringSplitOptions.RemoveEmptyEntries)
-                        .Select(c => new SearchResultItem(c.Trim(), null))
-                        .ToList()
+                    chunks.Select(c => new SearchResultItem(c.Content!, c.Title)).ToList()
                 ));
             }).WithName("Search");
 

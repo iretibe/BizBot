@@ -4,5 +4,5 @@
 
     public record SearchResponse(List<SearchResultItem> Results);
 
-    public record KnowledgeChunk(string Title, string Content);
+    public record KnowledgeChunk(string? Title, string? Content, double? Score = null);
 }
