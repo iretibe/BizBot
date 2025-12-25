@@ -31,20 +31,33 @@ namespace BizBot.WebApi.Services
             string userMessage, string tenantId, string? conversationId = null,
             CancellationToken cancellationToken = default)
         {
-            // Load tenant configuration
             var tenant = await _cosmos.GetTenantConfigAsync(tenantId);
-            string deployment = tenant.Model ?? _deploymentName;
+            var deployment = tenant.Model ?? _deploymentName;
 
-            // Retrieve knowledge context (RAG)
-            var knowledgeContext = await _search.SearchRelevantContextSimpleAsync(userMessage, tenantId);
+            var knowledgeChunks =
+                await _search.SearchRelevantChunksAsync(userMessage, tenantId);
 
-            // Build strict system prompt (anti-hallucination)
+            if (!knowledgeChunks.Any())
+            {
+                return new Responses.ChatResponse(
+                    "I don't have that information yet.",
+                    conversationId ?? Guid.NewGuid().ToString()
+                );
+            }
+
+            var knowledgeContext = string.Join(
+                "\n\n",
+                knowledgeChunks.Select(k =>
+                    $"[Source: {k.Title}]\n{k.Content}")
+            );
+
             var systemPrompt = $"""
-                You are BizBot, a helpful AI assistant for a business.
+                You are BizBot, a business AI assistant.
 
-                Use ONLY the knowledge provided below to answer.
-                If the answer is not contained in the knowledge, say:
-                "I don't have that information yet."
+                Rules:
+                - Answer ONLY using the knowledge below.
+                - If not found, say:
+                  "I don't have that information yet."
 
                 --- KNOWLEDGE START ---
                 {knowledgeContext}
@@ -52,7 +65,6 @@ namespace BizBot.WebApi.Services
                 """
             ;
 
-            // Create the abstracted client
             IChatClient chatClient = _client.GetChatClient(deployment).AsIChatClient();
 
             var messages = new List<ChatMessage>
@@ -64,24 +76,81 @@ namespace BizBot.WebApi.Services
             var options = new ChatOptions
             {
                 MaxOutputTokens = tenant.MaxTokens,
-                Temperature = 0.2f // factual, RAG-friendly
+                Temperature = 0.2f
             };
 
-            // Call OpenAI with controlled timeout
-            using var openAiCts = new CancellationTokenSource(TimeSpan.FromMinutes(10));
-
             var response = await chatClient.GetResponseAsync(
-                messages, options, openAiCts.Token);
+                messages, options, cancellationToken);
 
-            // Extracted response and log conversation
-            var assistantMessage = response.Messages.FirstOrDefault()?.Text ?? "I don’t have that information yet.";
-            var finalConversationId = conversationId ?? Guid.NewGuid().ToString();
+            var answer =
+                response.Messages.FirstOrDefault()?.Text
+                ?? "I don't have that information yet.";
 
-            // Persist conversation
-            await _cosmos.LogConversationAsync(tenantId, 
-                finalConversationId, userMessage, assistantMessage);
+            var finalConversationId =
+                conversationId ?? Guid.NewGuid().ToString();
 
-            return new Responses.ChatResponse(assistantMessage, finalConversationId);
+            await _cosmos.LogConversationAsync(
+                tenantId, finalConversationId, userMessage, answer);
+
+            return new Responses.ChatResponse(answer, finalConversationId);
         }
+
+
+        //public async Task<Responses.ChatResponse> GetCompletionAsync(
+        //    string userMessage, string tenantId, string? conversationId = null,
+        //    CancellationToken cancellationToken = default)
+        //{
+        //    // Load tenant configuration
+        //    var tenant = await _cosmos.GetTenantConfigAsync(tenantId);
+        //    string deployment = tenant.Model ?? _deploymentName;
+
+        //    // Retrieve knowledge context (RAG)
+        //    var knowledgeContext = await _search.SearchRelevantContextSimpleAsync(userMessage, tenantId);
+
+        //    // Build strict system prompt (anti-hallucination)
+        //    var systemPrompt = $"""
+        //        You are BizBot, a helpful AI assistant for a business.
+
+        //        Use ONLY the knowledge provided below to answer.
+        //        If the answer is not contained in the knowledge, say:
+        //        "I don't have that information yet."
+
+        //        --- KNOWLEDGE START ---
+        //        {knowledgeContext}
+        //        --- KNOWLEDGE END ---
+        //        """
+        //    ;
+
+        //    // Create the abstracted client
+        //    IChatClient chatClient = _client.GetChatClient(deployment).AsIChatClient();
+
+        //    var messages = new List<ChatMessage>
+        //    {
+        //        new(ChatRole.System, systemPrompt),
+        //        new(ChatRole.User, userMessage)
+        //    };
+
+        //    var options = new ChatOptions
+        //    {
+        //        MaxOutputTokens = tenant.MaxTokens,
+        //        Temperature = 0.2f // factual, RAG-friendly
+        //    };
+
+        //    // Call OpenAI with controlled timeout
+        //    using var openAiCts = new CancellationTokenSource(TimeSpan.FromMinutes(10));
+
+        //    var response = await chatClient.GetResponseAsync(
+        //        messages, options, openAiCts.Token);
+
+        //    // Extracted response and log conversation
+        //    var assistantMessage = response.Messages.FirstOrDefault()?.Text ?? "I don’t have that information yet.";
+        //    var finalConversationId = conversationId ?? Guid.NewGuid().ToString();
+
+        //    // Persist conversation
+        //    await _cosmos.LogConversationAsync(tenantId, 
+        //        finalConversationId, userMessage, assistantMessage);
+
+        //    return new Responses.ChatResponse(assistantMessage, finalConversationId);
+        //}
     }
 }

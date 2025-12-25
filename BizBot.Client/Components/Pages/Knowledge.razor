@@ -1,8 +1,10 @@
 ﻿@page "/knowledge"
+@attribute [Authorize]
 
 @rendermode InteractiveServer
 
 @using BizBot.Client.Services
+@using Microsoft.AspNetCore.Authorization
 @using MudBlazor
 @inject SearchClientService _SearchService
 

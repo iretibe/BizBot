@@ -1,4 +1,6 @@
-﻿using BizBot.WebApi.Responses;
+﻿using BizBot.WebApi.Helpers;
+using BizBot.WebApi.Interfaces;
+using BizBot.WebApi.Responses;
 using System.Text;
 using System.Text.Json;
 
@@ -9,13 +11,17 @@ namespace BizBot.WebApi.Services
         private readonly HttpClient _httpClient;
         private readonly IConfiguration _configuration;
         private readonly Dictionary<string, string> _planCodes;
+        private readonly IExchangeRateService _exchangeRateService;
 
         public string WebhookSecret => _configuration["Paystack:WebhookSecret"]!;
 
-        public PaystackService(IConfiguration configuration, IHttpClientFactory httpClientFactory)
+        public PaystackService(IConfiguration configuration, 
+            IHttpClientFactory httpClientFactory,
+            IExchangeRateService exchangeRateService)
         {
             _configuration = configuration;
             _httpClient = httpClientFactory.CreateClient();
+            _exchangeRateService = exchangeRateService;
 
             // Setup HttpClient for PayStack API
             _httpClient.BaseAddress = new Uri("https://api.paystack.co/");
@@ -33,19 +39,22 @@ namespace BizBot.WebApi.Services
 
         // Create a subscription checkout (initialize transaction)
         public async Task<PaystackTransactionResponse> CreateSubscriptionAsync(
-            string planName,
-            string customerEmail,
-            decimal amount,
-            string reference,
-            Dictionary<string, string> metadata)
+            string planName, string customerEmail, decimal amount,
+            string reference, Dictionary<string, string> metadata)
         {
             if (!_planCodes.TryGetValue(planName, out var planCode))
                 throw new ArgumentException($"Invalid plan: {planName}");
 
+            var usdAmount = PlanAmount.GetPlanAmount(planName);
+
+            // Convert USD → GHS
+            var ghsAmount = await _exchangeRateService.ConvertUsdToGhsAsync(usdAmount);
+
             var request = new
             {
                 email = customerEmail,
-                amount = amount * 100, // PayStack uses kobo (Naira * 100)
+                amount = (int)(ghsAmount * 100),
+                currency = "GHS",
                 plan = planCode,
                 reference = reference,
                 callback_url = _configuration["Paystack:CallbackUrl"],
@@ -75,18 +84,19 @@ namespace BizBot.WebApi.Services
         }
 
         // Create a subscription plan (one-time setup)
-        public async Task<PaystackPlanResponse> CreatePlanAsync(
-            string name,
-            decimal amount,
-            string interval = "monthly",
-            string currency = "GHC")
+        public async Task<PaystackPlanResponse> CreatePlanAsync(string name,
+            decimal usdAmount, string interval = "monthly", string currency = "USD")
         {
+            // Convert USD to GHS
+            var ghsAmount = await _exchangeRateService.ConvertUsdToGhsAsync(usdAmount);
+
+            // Paystack expects amount in pesewas
             var request = new
             {
                 name = name,
-                amount = amount * 100,
+                amount = (int)(ghsAmount * 100),
                 interval = interval,
-                currency = currency
+                currency = "GHS"
             };
 
             var json = JsonSerializer.Serialize(request);

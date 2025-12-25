@@ -1,107 +1,642 @@
 ﻿@page "/subscriptions"
+@attribute [Authorize]
+@rendermode InteractiveServer
+
+@using BizBot.Client.Services
+@using Microsoft.AspNetCore.Authorization
 @using MudBlazor
-@inject BizBot.Client.Services.SubscriptionClientService SubClient
+@using System.Security.Claims
 
-<MudPaper Class="pa-4" Elevation="2">
-    <MudText Typo="Typo.h4">Choose a Subscription Plan</MudText>
+@inject SubscriptionClientService _subClient
+@inject AuthenticationStateProvider _authProvider
 
-    <MudSelect @bind-Value="Plan"
-               Label="Select a plan"
-               FullWidth="true">
-
-        <MudSelectItem Value="@("starter")">
-            Starter – $29
-        </MudSelectItem>
-
-        <MudSelectItem Value="@("pro")">
-            Pro – $99
-        </MudSelectItem>
-
-        <MudSelectItem Value="@("agency")">
-            Agency – $299
-        </MudSelectItem>
-
-    </MudSelect>
-
-    <MudTextField @bind-Value="Email"
-                  Label="Email"
-                  FullWidth="true"
-                  Class="mt-3" />
-
-    <MudTextField @bind-Value="Name"
-                  Label="Name"
-                  FullWidth="true"
-                  Class="mt-2" />
-
-    <MudButton OnClick="Subscribe"
-               Color="Color.Primary"
-               Variant="Variant.Filled"
-               Class="mt-4">
-        Subscribe
-    </MudButton>
-
-    @if (!string.IsNullOrEmpty(CheckoutUrl))
-    {
-        <MudAlert Severity="Severity.Info" Class="mt-3">
-            <a href="@CheckoutUrl" target="_blank">
-                Click here to continue to payment
-            </a>
-        </MudAlert>
+<style>
+    .plan-card {
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
     }
-</MudPaper>
+
+        .plan-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.08);
+        }
+
+        .plan-card.selected {
+            border: 2px solid var(--mud-palette-primary);
+            background-color: rgba(98, 0, 238, 0.05);
+        }
+
+    .plan-badge-wrapper {
+        position: relative;
+    }
+
+    .most-popular-chip {
+        position: absolute;
+        top: -12px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 2;
+    }
+</style>
+
+<MudContainer MaxWidth="MaxWidth.False" Class="mt-6">
+
+    <MudPaper Elevation="2" Class="pa-6">
+
+        <MudText Typo="Typo.h4" Align="Align.Center" GutterBottom>
+            Choose a Subscription Plan
+        </MudText>
+
+        <!-- BILLING TOGGLE -->
+        <MudStack Direction="Row"
+                  AlignItems="AlignItems.Center"
+                  JustifyContent="Justify.Center"
+                  Spacing="2"
+                  Class="mt-4 mb-8">
+
+            <MudText Typo="Typo.subtitle2">Monthly</MudText>
+
+            <MudSwitch T="bool"
+                       @bind-Checked="IsYearly"
+                       Color="Color.Primary" />
+
+            <MudText Typo="Typo.subtitle2">Yearly</MudText>
+
+            <MudChip T="string"
+                     Color="Color.Success"
+                     Size="Size.Small">
+                Save 20%
+            </MudChip>
+
+        </MudStack>
+
+        <!-- PLANS -->
+        <MudRadioGroup T="string" @bind-Value="Plan" Required="true">
+
+            <MudGrid>
+
+                <!-- STARTER -->
+                <MudItem xs="12" md="4">
+                    <MudCard Class="@GetPlanClass("starter")"
+                             Outlined="true"
+                             Style="cursor:pointer; height:100%"
+                             OnClick="@(() => SelectPlan("starter"))">
+
+                        <MudCardContent>
+                            <MudRadio T="string" Value="@("starter")" />
+                            <MudText Typo="Typo.h6">Starter</MudText>
+                            <MudText Color="Color.Secondary">
+                                @($"{GetPrice(29):C0} / {BillingLabel}")
+                            </MudText>
+                            <MudText Typo="Typo.body2">
+                                Ideal for small teams getting started
+                            </MudText>
+                        </MudCardContent>
+
+                    </MudCard>
+                </MudItem>
+
+                <!-- PRO (MOST POPULAR) -->
+                <MudItem xs="12" md="4">
+
+                    <div class="plan-badge-wrapper">
+
+                        <MudChip T="string"
+                                 Color="Color.Primary"
+                                 Size="Size.Small"
+                                 Class="most-popular-chip">
+                            Most Popular
+                        </MudChip>
+
+                        <MudCard Class="@GetPlanClass("pro")"
+                                 Outlined="true"
+                                 Style="cursor:pointer; height:100%"
+                                 OnClick="@(() => SelectPlan("pro"))">
+
+                            <MudCardContent>
+                                <MudRadio T="string" Value="@("pro")" />
+                                <MudText Typo="Typo.h6">Pro</MudText>
+                                <MudText Color="Color.Secondary">
+                                    @($"{GetPrice(99):C0} / {BillingLabel}")
+                                </MudText>
+                                <MudText Typo="Typo.body2">
+                                    Best for growing businesses
+                                </MudText>
+                            </MudCardContent>
+
+                        </MudCard>
+
+                    </div>
+
+                </MudItem>
+
+                <!-- AGENCY -->
+                <MudItem xs="12" md="4">
+                    <MudCard Class="@GetPlanClass("agency")"
+                             Outlined="true"
+                             Style="cursor:pointer; height:100%"
+                             OnClick="@(() => SelectPlan("agency"))">
+
+                        <MudCardContent>
+                            <MudRadio T="string" Value="@("agency")" />
+                            <MudText Typo="Typo.h6">Agency</MudText>
+                            <MudText Color="Color.Secondary">
+                                @($"{GetPrice(299):C0} / {BillingLabel}")
+                            </MudText>
+                            <MudText Typo="Typo.body2">
+                                White-label & multi-client support
+                            </MudText>
+                        </MudCardContent>
+
+                    </MudCard>
+                </MudItem>
+
+            </MudGrid>
+
+        </MudRadioGroup>
+
+        <!-- BUSINESS DETAILS -->
+        <MudTextField @bind-Value="Email"
+                      Label="Business Email"
+                      Variant="Variant.Outlined"
+                      Required="true"
+                      FullWidth="true"
+                      Class="mt-8" />
+
+        <MudTextField @bind-Value="BusinessName"
+                      Label="Business Name"
+                      Variant="Variant.Outlined"
+                      Required="true"
+                      FullWidth="true"
+                      Class="mt-3" />
+
+        <!-- SUBMIT -->
+        <MudButton OnClick="Subscribe"
+                   Disabled="@(!IsFormValid || IsProcessing)"
+                   Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   Size="Size.Large"
+                   FullWidth="true"
+                   Class="mt-5">
+
+            @(!IsProcessing ? "Proceed to Payment" : "Processing…")
+
+        </MudButton>
+
+        <MudText Typo="Typo.caption" Align="Align.Center" Class="mt-2">
+            Prices shown in USD. Final billing is in GHS based on exchange rate.
+        </MudText>
+
+        @if (!string.IsNullOrWhiteSpace(CheckoutUrl))
+        {
+            <MudAlert Severity="Severity.Success" Class="mt-4">
+                <MudLink Href="@CheckoutUrl" Target="_blank">
+                    Continue to secure payment
+                </MudLink>
+            </MudAlert>
+        }
+
+    </MudPaper>
+
+</MudContainer>
 
 @code {
-    string Plan = "starter";
-    string Email = "";
-    string Name = "";
-    string CheckoutUrl = "";
+    private string Plan = "pro";
+    private bool IsYearly = false;
+    private string Email = "";
+    private string BusinessName = "";
+    private string CheckoutUrl = "";
+    private bool IsProcessing = false;
 
-    async Task Subscribe()
+    private string BillingLabel => IsYearly ? "year" : "month";
+
+    protected override async Task OnInitializedAsync()
     {
-        var init = await SubClient.InitializeAsync(Plan, Email, Name);
-        if (init != null)
-            CheckoutUrl = init.AuthorizationUrl;
+        var auth = await _authProvider.GetAuthenticationStateAsync();
+        Email = auth.User.FindFirst(ClaimTypes.Email)?.Value ?? "";
+    }
+
+    private void SelectPlan(string plan) => Plan = plan;
+
+    private string GetPlanClass(string plan)
+        => Plan == plan ? "pa-4 plan-card selected" : "pa-4 plan-card";
+
+    private decimal GetPrice(decimal monthly)
+        => IsYearly ? monthly * 12 * 0.8m : monthly;
+
+    private bool IsFormValid =>
+        !string.IsNullOrWhiteSpace(Plan) &&
+        !string.IsNullOrWhiteSpace(Email) &&
+        !string.IsNullOrWhiteSpace(BusinessName);
+
+    private async Task Subscribe()
+    {
+        if (!IsFormValid || IsProcessing)
+            return;
+
+        IsProcessing = true;
+        CheckoutUrl = "";
+
+        try
+        {
+            var result = await _subClient.InitializeAsync(
+                Plan,
+                Email,
+                BusinessName);
+
+            if (result != null)
+                CheckoutUrl = result.AuthorizationUrl;
+        }
+        finally
+        {
+            IsProcessing = false;
+        }
     }
 }
+
+
+
+@* <MudContainer MaxWidth="MaxWidth.False" Class="mt-6">
+
+    <MudPaper Elevation="2" Class="pa-6">
+
+        <MudText Typo="Typo.h4" Align="Align.Center">
+            Choose a Subscription Plan
+        </MudText>
+
+        <!-- BILLING TOGGLE -->
+        <MudStack Direction="Row" AlignItems="AlignItems.Center" JustifyContent="Center" Class="mt-2 mb-4">
+            <MudText Typo="Typo.subtitle2">Monthly</MudText>
+
+            <MudSwitch T="bool"
+                       @bind-Checked="IsYearly"
+                       Color="Color.Primary" />
+
+            <MudText Typo="Typo.subtitle2">Yearly</MudText>
+                <MudChip T="string"
+                         Color="Color.Success"
+                         Size="Size.Small">
+                    Save 20%
+                </MudChip>
+        </MudStack>
+
+        <!-- PLANS -->
+        <MudRadioGroup T="string" @bind-Value="Plan" Required="true">
+
+            <MudGrid Class="mt-6">
+
+                <!-- STARTER -->
+                <MudItem xs="12" md="4">
+                    <MudCard Class="@GetPlanClass("starter")"
+                             Style="cursor:pointer; height:100%"
+                             Outlined="true"
+                             OnClick="@(() => SelectPlan("starter"))">
+
+                        <MudCardContent>
+                            <MudRadio T="string" Value="@("starter")" />
+                            <MudText Typo="Typo.h6">Starter</MudText>
+                            <MudText Color="Color.Secondary">
+                                @($"{GetPrice(29):C0} / {BillingLabel}")
+                            </MudText>
+                            <MudText Typo="Typo.body2">
+                                Ideal for small teams getting started
+                            </MudText>
+                        </MudCardContent>
+
+                    </MudCard>
+                </MudItem>
+
+                <!-- PRO (MOST POPULAR) -->
+                <MudItem xs="12" md="4">
+
+                    <MudBadge Color="Color.Primary"
+                              Overlap="true"
+                              Class="mb-2">
+                        Most Popular
+                    </MudBadge>
+
+                    <MudCard Class="@GetPlanClass("pro")"
+                             Style="cursor:pointer; height:100%"
+                             Outlined="true"
+                             OnClick="@(() => SelectPlan("pro"))">
+
+                        <MudCardContent>
+                            <MudRadio T="string" Value="@("pro")" />
+                            <MudText Typo="Typo.h6">Pro</MudText>
+                            <MudText Color="Color.Secondary">
+                                @($"{GetPrice(99):C0} / {BillingLabel}")
+                            </MudText>
+                            <MudText Typo="Typo.body2">
+                                Best for growing businesses
+                            </MudText>
+                        </MudCardContent>
+
+                    </MudCard>
+
+                </MudItem>
+
+                <!-- AGENCY -->
+                <MudItem xs="12" md="4">
+                    <MudCard Class="@GetPlanClass("agency")"
+                             Style="cursor:pointer; height:100%"
+                             Outlined="true"
+                             OnClick="@(() => SelectPlan("agency"))">
+
+                        <MudCardContent>
+                            <MudRadio T="string" Value="@("agency")" />
+                            <MudText Typo="Typo.h6">Agency</MudText>
+                            <MudText Color="Color.Secondary">
+                                @($"{GetPrice(299):C0} / {BillingLabel}")
+                            </MudText>
+                            <MudText Typo="Typo.body2">
+                                White-label & multi-client support
+                            </MudText>
+                        </MudCardContent>
+
+                    </MudCard>
+                </MudItem>
+
+            </MudGrid>
+
+        </MudRadioGroup>
+
+        <!-- BUSINESS INFO -->
+        <MudTextField @bind-Value="Email"
+                      Label="Business Email"
+                      Variant="Variant.Outlined"
+                      Required="true"
+                      Class="mt-6"
+                      FullWidth="true" />
+
+        <MudTextField @bind-Value="BusinessName"
+                      Label="Business Name"
+                      Variant="Variant.Outlined"
+                      Required="true"
+                      Class="mt-3"
+                      FullWidth="true" />
+
+        <!-- SUBMIT -->
+        <MudButton OnClick="Subscribe"
+                   Disabled="@(!IsFormValid || IsProcessing)"
+                   Color="Color.Primary"
+                   Variant="Variant.Filled"
+                   Class="mt-5"
+                   FullWidth="true"
+                   Size="Size.Large">
+
+            @(!IsProcessing ? "Proceed to Payment" : "Processing…")
+
+        </MudButton>
+
+        <MudText Typo="Typo.caption" Class="mt-2" Align="Align.Center">
+            Prices shown in USD. Final billing is in GHS based on exchange rate.
+        </MudText>
+
+        @if (!string.IsNullOrWhiteSpace(CheckoutUrl))
+        {
+            <MudAlert Severity="Severity.Success" Class="mt-4">
+                <MudLink Href="@CheckoutUrl" Target="_blank">
+                    Continue to secure payment
+                </MudLink>
+            </MudAlert>
+        }
+
+    </MudPaper>
+
+</MudContainer>
+
+@code {
+    private string Plan = "starter";
+    private string Email = "";
+    private string BusinessName = "";
+    private string CheckoutUrl = "";
+    private bool IsProcessing = false;
+    private bool IsYearly = false;
+
+    private string BillingLabel => IsYearly ? "year" : "month";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthProvider.GetAuthenticationStateAsync();
+        Email = authState.User.FindFirst(ClaimTypes.Email)?.Value ?? "";
+    }
+
+    private void SelectPlan(string plan) => Plan = plan;
+
+    private string GetPlanClass(string plan)
+        => Plan == plan ? "pa-4 border-primary plan-hover" : "pa-4 plan-hover";
+
+    private decimal GetPrice(decimal monthlyPrice)
+        => IsYearly ? monthlyPrice * 12 * 0.8m : monthlyPrice;
+
+    private bool IsFormValid =>
+        !string.IsNullOrWhiteSpace(Plan) &&
+        !string.IsNullOrWhiteSpace(Email) &&
+        !string.IsNullOrWhiteSpace(BusinessName);
+
+    private async Task Subscribe()
+    {
+        if (!IsFormValid || IsProcessing)
+            return;
+
+        IsProcessing = true;
+        CheckoutUrl = "";
+
+        try
+        {
+            var result = await SubClient.InitializeAsync(
+                Plan,
+                Email,
+                BusinessName);
+
+            if (result != null)
+                CheckoutUrl = result.AuthorizationUrl;
+        }
+        finally
+        {
+            IsProcessing = false;
+        }
+    }
+}
+ *@
+
+
+
 
 
 
 @* @page "/subscriptions"
+@attribute [Authorize]
+
+@rendermode InteractiveServer
+
+@using BizBot.Client.Services
+@using Microsoft.AspNetCore.Authorization
 @using MudBlazor
-@inject BizBot.Client.Services.SubscriptionClientService SubClient
 
-<MudPaper Class="pa-4" Elevation="2">
-    <MudText Typo="Typo.h4">Choose a Subscription Plan</MudText>
+@inject SubscriptionClientService _subClient
 
-    <MudSelect @bind-Value="Plan" Label="Plan">
-        <MudSelectItem Value="@("starter")">Starter - $29</MudSelectItem>
-        <MudSelectItem Value="@("pro")">Pro - $99</MudSelectItem>
-        <MudSelectItem Value="@("agency")">Agency - $299</MudSelectItem>
-    </MudSelect>
-
-    <MudTextField @bind-Value="Email" Label="Email" FullWidth="true" />
-    <MudTextField @bind-Value="Name" Label="Name" FullWidth="true" />
-
-    <MudButton OnClick="Subscribe" Color="Color.Primary" Class="mt-3">Subscribe</MudButton>
-
-    @if (!string.IsNullOrEmpty(CheckoutUrl))
-    {
-        <MudAlert Severity="Severity.Info" Class="mt-3">
-            <a href="@CheckoutUrl" target="_blank">Click here to continue to payment</a>
-        </MudAlert>
+<style>
+    .border-primary {
+        border: 2px solid var(--mud-palette-primary);
+        background-color: rgba(98, 0, 238, 0.06);
     }
-</MudPaper>
+</style>
+
+<MudContainer MaxWidth="MaxWidth.False" Class="mt-6">
+
+    <MudPaper Elevation="2" Class="pa-6">
+
+        <MudText Typo="Typo.h4" GutterBottom Align="Align.Center">
+            Choose a Subscription Plan
+        </MudText>
+
+        <!-- PLANS -->
+        <MudRadioGroup T="string" @bind-Value="Plan" Required="true">
+
+            <MudGrid Class="mt-4">
+
+                <!-- STARTER -->
+                <MudItem xs="12" md="4">
+                    <MudCard Class="@GetPlanClass("starter")"
+                             Style="cursor:pointer; height:100%"
+                             Outlined="true"
+                             OnClick="@(() => SelectPlan("starter"))">
+
+                        <MudCardContent>
+                            <MudRadio T="string" Value="@("starter")" />
+                            <MudText Typo="Typo.h6">Starter</MudText>
+                            <MudText Color="Color.Secondary">$29 / month</MudText>
+                            <MudText Typo="Typo.body2">
+                                Ideal for small teams getting started
+                            </MudText>
+                        </MudCardContent>
+
+                    </MudCard>
+                </MudItem>
+
+                <!-- PRO -->
+                <MudItem xs="12" md="4">
+                    <MudCard Class="@GetPlanClass("pro")"
+                             Style="cursor:pointer; height:100%"
+                             Outlined="true"
+                             OnClick="@(() => SelectPlan("pro"))">
+
+                        <MudCardContent>
+                            <MudRadio T="string" Value="@("pro")" />
+                            <MudText Typo="Typo.h6">Pro</MudText>
+                            <MudText Color="Color.Secondary">$99 / month</MudText>
+                            <MudText Typo="Typo.body2">
+                                Best for growing businesses
+                            </MudText>
+                        </MudCardContent>
+
+                    </MudCard>
+                </MudItem>
+
+                <!-- AGENCY -->
+                <MudItem xs="12" md="4">
+                    <MudCard Class="@GetPlanClass("agency")"
+                             Style="cursor:pointer; height:100%"
+                             Outlined="true"
+                             OnClick="@(() => SelectPlan("agency"))">
+
+                        <MudCardContent>
+                            <MudRadio T="string" Value="@("agency")" />
+                            <MudText Typo="Typo.h6">Agency</MudText>
+                            <MudText Color="Color.Secondary">$299 / month</MudText>
+                            <MudText Typo="Typo.body2">
+                                White-label & multi-client support
+                            </MudText>
+                        </MudCardContent>
+
+                    </MudCard>
+                </MudItem>
+
+            </MudGrid>
+
+        </MudRadioGroup>
+
+        <!-- BUSINESS INFO -->
+        <MudTextField @bind-Value="Email"
+                      Label="Business Email"
+                      Variant="Variant.Outlined"
+                      Required="true"
+                      Class="mt-6"
+                      FullWidth="true" />
+
+        <MudTextField @bind-Value="BusinessName"
+                      Label="Business Name"
+                      Variant="Variant.Outlined"
+                      Required="true"
+                      Class="mt-3"
+                      FullWidth="true" />
+
+        <!-- SUBMIT -->
+        <MudButton OnClick="Subscribe"
+                   Disabled="@IsProcessing"
+                   Color="Color.Primary"
+                   Variant="Variant.Filled"
+                   Class="mt-5"
+                   FullWidth="true"
+                   Size="Size.Large">
+
+            @(!IsProcessing ? "Proceed to Payment" : "Processing…")
+
+        </MudButton>
+
+        @if (!string.IsNullOrWhiteSpace(CheckoutUrl))
+        {
+            <MudAlert Severity="Severity.Success" Class="mt-4">
+                <MudLink Href="@CheckoutUrl" Target="_blank">
+                    Continue to secure payment
+                </MudLink>
+            </MudAlert>
+        }
+
+    </MudPaper>
+
+</MudContainer>
 
 @code {
-    string Plan = "starter";
-    string Email = "";
-    string Name = "";
-    string CheckoutUrl = "";
-    async Task Subscribe()
+    private string Plan = "starter";
+    private string Email = "";
+    private string BusinessName = "";
+    private string CheckoutUrl = "";
+    private bool IsProcessing = false;
+
+    private void SelectPlan(string plan)
     {
-        var init = await SubClient.InitializeAsync(Plan, Email, Name);
-        if (init != null)
-            CheckoutUrl = init.AuthorizationUrl;
+        Plan = plan;
     }
-}
- *@
+
+    private string GetPlanClass(string plan)
+    {
+        return Plan == plan
+            ? "pa-4 border-primary"
+            : "pa-4";
+    }
+
+    private async Task Subscribe()
+    {
+        if (IsProcessing)
+            return;
+
+        IsProcessing = true;
+        CheckoutUrl = "";
+
+        try
+        {
+            var result = await _subClient.InitializeAsync(
+                Plan,
+                Email,
+                BusinessName);
+
+            if (result != null)
+                CheckoutUrl = result.AuthorizationUrl;
+        }
+        finally
+        {
+            IsProcessing = false;
+        }
+    }
+} *@
