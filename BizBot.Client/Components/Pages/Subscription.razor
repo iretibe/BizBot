@@ -238,10 +238,7 @@
 
         try
         {
-            var result = await _subClient.InitializeAsync(
-                Plan,
-                Email,
-                BusinessName);
+            var result = await _subClient.InitializeAsync(Plan, Email, BusinessName, IsYearly);
 
             if (result != null)
                 CheckoutUrl = result.AuthorizationUrl;

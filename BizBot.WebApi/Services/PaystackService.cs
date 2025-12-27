@@ -1,5 +1,6 @@
 ﻿using BizBot.WebApi.Helpers;
 using BizBot.WebApi.Interfaces;
+using BizBot.WebApi.Models;
 using BizBot.WebApi.Responses;
 using System.Text;
 using System.Text.Json;
@@ -12,6 +13,8 @@ namespace BizBot.WebApi.Services
         private readonly IConfiguration _configuration;
         private readonly Dictionary<string, string> _planCodes;
         private readonly IExchangeRateService _exchangeRateService;
+        private readonly string _initializationUrl;
+        private readonly string _verificationUrl;
 
         public string WebhookSecret => _configuration["Paystack:WebhookSecret"]!;
 
@@ -35,17 +38,26 @@ namespace BizBot.WebApi.Services
                 ["pro"] = configuration["PaystackPlans:Pro"]!,
                 ["agency"] = configuration["PaystackPlans:Agency"]!
             };
+
+            // PayStack Initialization URL
+            _initializationUrl = $"{_configuration["Paystack:PayStackInitializationUrl"]}";
+            _verificationUrl = $"{_configuration["Paystack:PayStackVerificationUrl"]}";
         }
 
         // Create a subscription checkout (initialize transaction)
         public async Task<PaystackTransactionResponse> CreateSubscriptionAsync(
-            string planName, string customerEmail, decimal amount,
-            string reference, Dictionary<string, string> metadata)
+            string planKey, string customerEmail, string reference, Dictionary<string, string> metadata)
         {
-            if (!_planCodes.TryGetValue(planName, out var planCode))
-                throw new ArgumentException($"Invalid plan: {planName}");
+            // Resolve price from config
+            var plans = _configuration
+                .GetSection("SubscriptionPlans")
+                .Get<List<SubscriptionPlan>>()!;
 
-            var usdAmount = PlanAmount.GetPlanAmount(planName);
+            var plan = plans.Single(p => p.Key == planKey);
+
+            var usdAmount = metadata["billing_cycle"] == "yearly"
+                ? plan.YearlyUsd
+                : plan.MonthlyUsd;
 
             // Convert USD → GHS
             var ghsAmount = await _exchangeRateService.ConvertUsdToGhsAsync(usdAmount);
@@ -53,30 +65,29 @@ namespace BizBot.WebApi.Services
             var request = new
             {
                 email = customerEmail,
-                amount = (int)(ghsAmount * 100),
+                amount = (int)(ghsAmount * 100), // pesewas (CORRECT)
                 currency = "GHS",
-                plan = planCode,
                 reference = reference,
-                callback_url = _configuration["Paystack:CallbackUrl"],
+                callback_url = _configuration["Paystack:CallbackUrl"], // MUST NOT BE NULL
                 metadata = metadata
             };
 
             var json = JsonSerializer.Serialize(request);
             var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-            var response = await _httpClient.PostAsync("transaction/initialize", content);
+            var response = await _httpClient.PostAsync(_initializationUrl, content);
             response.EnsureSuccessStatusCode();
 
             var responseJson = await response.Content.ReadAsStringAsync();
-            var result = JsonSerializer.Deserialize<PaystackTransactionResponse>(responseJson);
+            var result = JsonSerializer.Deserialize<PaystackTransactionResponse>(responseJson)!;
 
-            return result!;
+            return result;
         }
 
         // Verify transaction
         public async Task<PaystackVerifyResponse> VerifyTransactionAsync(string reference)
         {
-            var response = await _httpClient.GetAsync($"transaction/verify/{reference}");
+            var response = await _httpClient.GetAsync($"{_verificationUrl}/{reference}");
             response.EnsureSuccessStatusCode();
 
             var json = await response.Content.ReadAsStringAsync();
@@ -111,7 +122,7 @@ namespace BizBot.WebApi.Services
 
         // Create customer
         public async Task<PaystackCustomerResponse> CreateCustomerAsync(
-            string email, string firstName, string lastName, string phone = null)
+            string email, string firstName, string lastName, string phone)
         {
             var request = new
             {
