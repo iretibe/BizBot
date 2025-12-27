@@ -158,11 +158,8 @@ namespace BizBot.WebApi.Services
         }
 
         // Conversation Logging
-        public async Task LogConversationAsync(
-            string tenantId,
-            string conversationId,
-            string userMessage,
-            string assistantMessage)
+        public async Task LogConversationAsync(string tenantId,
+            string conversationId, string userMessage, string assistantMessage)
         {
             EnsureInitialized();
 
@@ -207,6 +204,22 @@ namespace BizBot.WebApi.Services
             }
 
             return results;
+        }
+
+        public async Task<TenantConfig?> GetTenantByEmailAsync(string email)
+        {
+            var query = new QueryDefinition("SELECT * FROM c WHERE c.email = @email")
+                .WithParameter("@email", email);
+
+            using var iterator = _conversationsContainer!.GetItemQueryIterator<TenantConfig>(query);
+
+            while (iterator.HasMoreResults)
+            {
+                var response = await iterator.ReadNextAsync();
+                return response.Resource.FirstOrDefault();
+            }
+
+            return null;
         }
     }
 }

@@ -8,13 +8,15 @@ namespace BizBot.Client.Services
 
         public SubscriptionClientService(HttpClient http) => _http = http;
 
-        public async Task<SubscriptionInitResponse?> InitializeAsync(string plan, string email, string name)
+        public async Task<SubscriptionInitResponse?> InitializeAsync(string plan, string email, 
+            string name, bool isYearly)
         {
             var request = new 
             { 
                 PlanName = plan, 
                 CustomerEmail = email, 
-                CustomerName = name 
+                CustomerName = name,
+                BillingCycle = isYearly ? "yearly" : "monthly",
             };
 
             var response = await _http.PostAsJsonAsync("api/subscriptions/initialize", request);
