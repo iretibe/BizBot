@@ -1,17 +1,14 @@
 ﻿(function () {
-
     const scriptTag = document.currentScript;
-
-    // Required attributes
-    const tenant = scriptTag.getAttribute("data-tenant");
     const widgetUrl = scriptTag.getAttribute("data-widget-url");
+    const widgetToken = scriptTag.getAttribute("data-widget-token");
 
-    // Optional theme attributes
-    const color = scriptTag.getAttribute("data-color") || "#4f46e5";   // default purple
-    const textColor = scriptTag.getAttribute("data-text") || "white";
-    const welcome = scriptTag.getAttribute("data-welcome") || "Hi 👋 How can I help you today?";
+    if (!widgetUrl || !widgetToken) {
+        console.error("BizBot widget: missing data-widget-url or data-widget-token");
+        return;
+    }
 
-    // ---- Floating Button ----
+    // Floating Button
     const btn = document.createElement("div");
     btn.innerHTML = "💬";
     Object.assign(btn.style, {
@@ -20,23 +17,19 @@
         right: "24px",
         width: "56px",
         height: "56px",
-        background: color,
-        color: textColor,
+        background: "#4f46e5",
+        color: "white",
         fontSize: "28px",
-        fontWeight: "bold",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
         borderRadius: "50%",
         cursor: "pointer",
-        transition: "transform 0.25s ease",
-        boxShadow: "0 4px 10px rgba(0,0,0,0.3)",
         zIndex: "999999",
     });
     document.body.appendChild(btn);
 
-
-    // ---- Chat Panel (Sliding) ----
+    // Panel
     const panel = document.createElement("div");
     Object.assign(panel.style, {
         position: "fixed",
@@ -46,44 +39,60 @@
         height: "520px",
         background: "white",
         borderRadius: "14px",
-        overflow: "hidden",
         boxShadow: "0 6px 18px rgba(0,0,0,0.3)",
-        transform: "translateY(40px)",
         opacity: "0",
-        transition: "transform 0.35s ease, opacity 0.2s ease",
-        zIndex: "999998",
         pointerEvents: "none",
+        transition: "0.3s",
+        zIndex: "999998",
     });
     document.body.appendChild(panel);
 
-    // ---- Iframe ----
+    // Iframe (created once)
     const frame = document.createElement("iframe");
-    frame.src = `${widgetUrl}?tenant=${tenant}&welcome=${encodeURIComponent(welcome)}`;
     frame.style.width = "100%";
     frame.style.height = "100%";
     frame.style.border = "none";
+    frame.setAttribute(
+        "sandbox",
+        "allow-scripts allow-same-origin"
+    );
+    frame.setAttribute("loading", "lazy");
     panel.appendChild(frame);
 
+    let loaded = false;
 
-    // ---- Animation Toggle ----
+    // Fetch widget config securely
+    fetch(`${widgetUrl}/api/widget/config`, {
+        headers: {
+            "Authorization": `Bearer ${widgetToken}`
+        }
+    })
+        .then(r => r.json())
+        .then(cfg => {
+            btn.style.background = cfg.theme?.primaryColor || "#4f46e5";
+
+            const welcome =
+                cfg.welcomeMessage || "Hi friend, how can I help you today?";
+
+            frame.src =
+                `${widgetUrl}/embed?token=${encodeURIComponent(widgetToken)}&welcome=${encodeURIComponent(welcome)}`;
+
+            if (cfg.showBranding) {
+                const badge = document.createElement("div");
+                badge.innerText = "Powered by BizBot";
+                badge.style.fontSize = "11px";
+                badge.style.textAlign = "center";
+                panel.appendChild(badge);
+            }
+
+            loaded = true;
+        });
+
+    // Toggle
     let open = false;
-
     btn.onclick = () => {
         open = !open;
-        if (open) {
-            btn.style.transform = "scale(0.9)";
-
-            panel.style.opacity = "1";
-            panel.style.pointerEvents = "auto";
-            panel.style.transform = "translateY(0)";
-        }
-        else {
-            btn.style.transform = "scale(1)";
-
-            panel.style.opacity = "0";
-            panel.style.pointerEvents = "none";
-            panel.style.transform = "translateY(40px)";
-        }
+        panel.style.opacity = open ? "1" : "0";
+        panel.style.pointerEvents = open ? "auto" : "none";
     };
-
 })();

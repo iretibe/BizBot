@@ -6,5 +6,7 @@
         public int MessagesUsed { get; set; }
         public int SearchesUsed { get; set; }
         public DateTime PeriodStart { get; set; }
+        public int Tokens { get; set; }
+        public decimal CostUsd { get; set; }
     }
 }

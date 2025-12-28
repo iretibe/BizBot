@@ -39,9 +39,14 @@ namespace BizBot.WebApi.Services
 
             if (!knowledgeChunks.Any())
             {
+                var cid = conversationId ?? Guid.NewGuid().ToString();
+
+                await _cosmos.LogConversationAsync(
+                    tenantId, cid, userMessage, "I don't have that information yet.");
+
                 return new Responses.ChatResponse(
                     "I don't have that information yet.",
-                    conversationId ?? Guid.NewGuid().ToString()
+                    cid
                 );
             }
 
@@ -51,19 +56,21 @@ namespace BizBot.WebApi.Services
                     $"[Source: {k.Title}]\n{k.Content}")
             );
 
-            var systemPrompt = $"""
-                You are BizBot, a business AI assistant.
+            //var systemPrompt = $"""
+            //    You are BizBot, a business AI assistant.
 
-                Rules:
-                - Answer ONLY using the knowledge below.
-                - If not found, say:
-                  "I don't have that information yet."
+            //    Rules:
+            //    - Answer ONLY using the knowledge below.
+            //    - If not found, say:
+            //      "I don't have that information yet."
 
-                --- KNOWLEDGE START ---
-                {knowledgeContext}
-                --- KNOWLEDGE END ---
-                """
-            ;
+            //    --- KNOWLEDGE START ---
+            //    {knowledgeContext}
+            //    --- KNOWLEDGE END ---
+            //    """
+            //;
+
+            var systemPrompt = tenant.CustomSystemPrompt ?? DefaultPromptBuilder.Build(knowledgeContext);
 
             IChatClient chatClient = _client.GetChatClient(deployment).AsIChatClient();
 
