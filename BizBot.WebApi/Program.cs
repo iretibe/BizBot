@@ -46,11 +46,14 @@ builder.Services.AddHttpClient();
 
 builder.Services.AddHttpClient<IExchangeRateService, ExchangeRateService>();
 
+builder.Services.AddScoped<IEmailService, EmailService>();
+
 // Register CosmosDbService as singleton so InitializeAsync configures the single instance used by all requests
 builder.Services.AddScoped<OpenAIService>();
 builder.Services.AddScoped<PaystackService>();
 builder.Services.AddScoped<AzureSearchIndexManager>();
 builder.Services.AddScoped<AzureAISearchService>();
+builder.Services.AddScoped<WidgetTokenService>();
 
 var app = builder.Build();
 
@@ -84,6 +87,9 @@ app.UseCors("AllowWidget");
 app.MapChatEndpoints();
 app.MapSubscriptionEndpoints();
 app.MapSearchEndpoints();
+app.MapSettingsEndpoints();
+app.MapWidgetEndpoints();
+app.MapAdminEndpoints();
 
 app.MapGet("/", () => "BizBot API is running!");
 app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = DateTime.UtcNow }));

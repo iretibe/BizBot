@@ -1,0 +1,32 @@
+﻿@page "/subscription/success"
+@attribute [Authorize]
+@rendermode InteractiveServer
+
+@using Microsoft.AspNetCore.Authorization
+@using MudBlazor
+
+<MudContainer MaxWidth="MaxWidth.Small" Class="mt-10">
+    <MudPaper Elevation="2" Class="pa-6 text-center">
+
+        <MudIcon Icon="@Icons.Material.Filled.CheckCircle"
+                 Color="Color.Success"
+                 Size="Size.Large" />
+
+        <MudText Typo="Typo.h5" Class="mt-4">
+            Subscription Activated 🎉
+        </MudText>
+
+        <MudText Typo="Typo.body1" Class="mt-2">
+            Your BizBot subscription is now active.
+        </MudText>
+
+        <MudDivider Class="my-4" />
+
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   Href="/dashboard">
+            Go to Dashboard
+        </MudButton>
+
+    </MudPaper>
+</MudContainer>

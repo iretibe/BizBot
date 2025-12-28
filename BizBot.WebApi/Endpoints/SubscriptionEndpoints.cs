@@ -3,6 +3,7 @@ using BizBot.WebApi.Models;
 using BizBot.WebApi.Requests;
 using BizBot.WebApi.Services;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 using System.Text.Json;
 
 namespace BizBot.WebApi.Endpoints
@@ -52,15 +53,17 @@ namespace BizBot.WebApi.Endpoints
 
 
             // Verify transaction (callback from PayStack)
-            group.MapGet("/verify/{reference}", async (string reference, 
-                PaystackService paystack, CosmosDbService cosmos, IConfiguration config) =>
+            group.MapGet("/verify/{reference}", async (string reference,
+                PaystackService paystack, CosmosDbService cosmos,
+                IConfiguration config, IEmailService emailService) =>
             {
+                // Verify with Paystack
                 var verification = await paystack.VerifyTransactionAsync(reference);
 
                 if (verification.Data.Status != "success")
-                    return Results.BadRequest("Payment not successful");
+                    return Results.Redirect("/subscription/failed");
 
-                // Find tenant (or create)
+                // Find or create tenant
                 var tenant = await cosmos.GetTenantByEmailAsync(
                     verification.Data.Customer.Email)
                     ?? new TenantConfig
@@ -69,80 +72,42 @@ namespace BizBot.WebApi.Endpoints
                         Email = verification.Data.Customer.Email
                     };
 
-                // Load plans
+                // Load plan config
                 var plans = config
                     .GetSection("SubscriptionPlans")
                     .Get<List<SubscriptionPlan>>()!;
 
-                var plan = plans.Single(p => p.Key == verification.Data.Metadata.Plan);
+                var planKey = verification.Data.Metadata.Plan;
+                var billingCycle = verification.Data.Metadata.BillingCycle;
 
-                var planCode = verification.Data.Metadata.BillingCycle == "yearly"
+                var plan = plans.Single(p => p.Key == planKey);
+
+                var planCode = billingCycle == "yearly"
                     ? plan.YearlyPlanCode
                     : plan.MonthlyPlanCode;
 
-                // Persist billing info
+                // Persist subscription
                 tenant.Plan = plan.Key;
-                tenant.BillingCycle = verification.Data.Metadata.BillingCycle;
+                tenant.BillingCycle = billingCycle;
                 tenant.PlanCode = planCode;
                 tenant.IsActive = true;
                 tenant.SubscribedAt = DateTime.UtcNow;
 
                 await cosmos.UpsertTenantAsync(tenant);
 
-                return Results.Ok();
+                // Send confirmation email
+                await emailService.SendAsync(
+                    tenant.Email!,
+                    "Your BizBot subscription is active 🎉",
+                    tenant.Plan!,
+                    tenant.BillingCycle!
+                );
+
+                // Redirect user to success page
+                return Results.Redirect("/subscription/success");
             })
             .WithName("VerifyTransaction");
 
-
-            //// Verify transaction (callback from PayStack)
-            //group.MapGet("/verify/{reference}", async (
-            //    string reference,
-            //    [FromServices] PaystackService paystackService,
-            //    [FromServices] CosmosDbService cosmosService) =>
-            //{
-            //    try
-            //    {
-            //        var verification = await paystackService.VerifyTransactionAsync(reference);
-
-            //        if (verification.Status && verification.Data.Status == "success")
-            //        {
-            //            // Create tenant in Cosmos DB
-            //            var tenant = new TenantConfig
-            //            {
-            //                Id = reference,
-            //                Name = $"{verification.Data.Customer.FirstName} {verification.Data.Customer.LastName}",
-            //                Email = verification.Data.Customer.Email,
-            //                Plan = verification.Data.Plan.Name,
-            //                PlanCode = verification.Data.Plan.PlanCode,
-            //                Amount = verification.Data.Amount / 100, // Convert back from kobo
-            //                SubscribedAt = DateTime.UtcNow,
-            //                IsActive = true,
-            //                PaymentReference = reference,
-
-            //                // AI defaults
-            //                SystemPrompt = "You are a helpful AI assistant for this business.",
-            //                Model = "bizbot-chat",
-            //                MaxTokens = 800
-            //            };
-
-            //            //await cosmosService.CreateTenantAsync(tenant);
-            //            await cosmosService.UpsertTenantAsync(tenant);
-
-            //            // Redirect to success page
-            //            return Results.Redirect("https://your-app.com/success");
-            //        }
-            //        else
-            //        {
-            //            // Redirect to failure page
-            //            return Results.Redirect($"https://your-app.com/failed?error={verification.Message}");
-            //        }
-            //    }
-            //    catch (Exception ex)
-            //    {
-            //        return Results.Problem($"Verification error: {ex.Message}");
-            //    }
-            //})
-            //.WithName("VerifyTransaction");
 
             // PayStack webhook endpoint
             group.MapPost("/webhook", async (HttpRequest request,
@@ -172,6 +137,19 @@ namespace BizBot.WebApi.Endpoints
 
                 return Results.Ok();
             });
+
+            //group.MapGet("/settings/white-label", async (
+            //    CosmosDbService cosmos,
+            //    ClaimsPrincipal user) =>
+            //{
+            //    var tenant = await cosmos.GetTenantFromUserAsync(user);
+
+            //    if (!PlanFeatures.CanUseWhiteLabel(tenant.Plan))
+            //        return Results.NotFound(); // or Forbid
+
+            //    return Results.Ok(tenant.WhiteLabelSettings);
+            //});
+
 
             //group.MapPost("/webhook", async (HttpRequest request,
             //    [FromServices] PaystackService paystackService,

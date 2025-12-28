@@ -53,5 +53,9 @@ namespace BizBot.WebApi.Models
 
         public string Model { get; set; } = "bizbot-chat";
         public int MaxTokens { get; set; } = 800;
+
+        public WhiteLabelSettings? WhiteLabelSettings { get; set; }
+
+        public string? CustomSystemPrompt { get; set; }
     }
 }
