@@ -383,5 +383,64 @@ namespace BizBot.WebApi.Services
                 usage,
                 new PartitionKey(usage.TenantId));
         }
+
+        public async Task<bool> HasProcessedWebhookAsync(string eventType, string reference)
+        {
+            EnsureInitialized();
+
+            var id = $"{eventType}_{reference}";
+
+            try
+            {
+                await _tenantsContainer!.ReadItemAsync<ProcessedWebhook>(
+                    id,
+                    new PartitionKey(id));
+
+                return true;
+            }
+            catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+            {
+                return false;
+            }
+        }
+
+        public async Task MarkWebhookProcessedAsync(string eventType, string reference)
+        {
+            EnsureInitialized();
+
+            var item = new ProcessedWebhook
+            {
+                Id = $"{eventType}_{reference}",
+                EventType = eventType,
+                Reference = reference
+            };
+
+            await _tenantsContainer!.UpsertItemAsync(
+                item,
+                new PartitionKey(item.Id));
+        }
+
+        public async Task MarkSubscriptionPaidAsync(string reference)
+        {
+            EnsureInitialized();
+
+            var query = new QueryDefinition(
+                "SELECT * FROM c WHERE c.paymentReference = @ref")
+                .WithParameter("@ref", reference);
+
+            using var iterator =
+                _tenantsContainer!.GetItemQueryIterator<TenantConfig>(query);
+
+            if (!iterator.HasMoreResults) return;
+
+            var response = await iterator.ReadNextAsync();
+            var tenant = response.Resource.FirstOrDefault();
+            if (tenant == null) return;
+
+            tenant.IsActive = true;
+            tenant.SubscribedAt = DateTime.UtcNow;
+
+            await UpsertTenantAsync(tenant);
+        }
     }
 }
