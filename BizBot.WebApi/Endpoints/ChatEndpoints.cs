@@ -15,6 +15,8 @@ namespace BizBot.WebApi.Endpoints
         {
             var group = app.MapGroup("/api/chat");
 
+            group.RequireRateLimiting("chat-per-tenant");
+
             group.MapPost("/completion", async (
                 [FromBody] ChatRequest request,
                 [FromServices] OpenAIService openAiService,

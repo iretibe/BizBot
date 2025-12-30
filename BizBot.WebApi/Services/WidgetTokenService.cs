@@ -20,23 +20,31 @@ namespace BizBot.WebApi.Services
             var claims = new[]
             {
                 new Claim("tid", tenant.Id),
-                new Claim("plan", tenant.Plan!)
+                new Claim("plan", tenant.Plan ?? "starter"),
+                new Claim(
+                    JwtRegisteredClaimNames.Iat,
+                    DateTimeOffset.UtcNow
+                        .ToUnixTimeSeconds()
+                        .ToString()
+                )
             };
 
             var key = new SymmetricSecurityKey(
-                Encoding.UTF8.GetBytes(_config["Widget:SigningKey"]!));
-
-            var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+                Encoding.UTF8.GetBytes(
+                    _config["Widget:SigningKey"]!));
 
             var token = new JwtSecurityToken(
                 issuer: "bizbot",
                 audience: "bizbot-widget",
                 claims: claims,
-                expires: DateTime.UtcNow.AddHours(12),
-                signingCredentials: creds
+                expires: DateTime.UtcNow.AddMinutes(15),
+                signingCredentials: new SigningCredentials(
+                    key,
+                    SecurityAlgorithms.HmacSha256)
             );
 
-            return new JwtSecurityTokenHandler().WriteToken(token);
+            return new JwtSecurityTokenHandler()
+                .WriteToken(token);
         }
     }
 }
