@@ -7,17 +7,21 @@ using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
+#region Kestrel / Linux App Service
+// Required for Azure Linux App Service
 builder.WebHost.ConfigureKestrel(options =>
 {
     options.ListenAnyIP(
         int.Parse(Environment.GetEnvironmentVariable("PORT") ?? "8080"));
 });
+#endregion
 
-// Services
+#region Core services
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+#endregion
 
-// CORS – SAFE widget policy
+#region CORS – Widget safe policy
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("WidgetPolicy", policy =>
@@ -26,20 +30,21 @@ builder.Services.AddCors(options =>
             .WithOrigins(
                 "https://widget.bizbot.space",
                 "https://app.bizbot.space"
-            // add client domains here later if needed
             )
             .AllowAnyHeader()
             .AllowAnyMethod();
     });
 });
+#endregion
 
-// Rate Limiting (chat protection)
+#region Rate limiting (per tenant)
 builder.Services.AddRateLimiter(options =>
 {
     options.AddPolicy("chat-per-tenant", context =>
     {
         var tenantId =
             context.User.FindFirst("tid")?.Value
+            ?? context.Request.Headers["X-Tenant-Id"].FirstOrDefault()
             ?? "anonymous";
 
         return RateLimitPartition.GetFixedWindowLimiter(
@@ -49,19 +54,21 @@ builder.Services.AddRateLimiter(options =>
                 PermitLimit = 20,
                 Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 5,
-                QueueProcessingOrder =
-                    QueueProcessingOrder.OldestFirst
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst
             });
     });
 });
+#endregion
 
-// Logging
+#region Logging
 builder.Services.AddLogging();
+#endregion
 
-// Azure Cosmos DB
+#region Azure Cosmos DB
 builder.Services.AddSingleton(provider =>
 {
     var config = provider.GetRequiredService<IConfiguration>();
+
     return new CosmosClient(
         config["CosmosDb:ConnectionString"],
         new CosmosClientOptions
@@ -76,7 +83,9 @@ builder.Services.AddSingleton(provider =>
 });
 
 builder.Services.AddSingleton<CosmosDbService>();
+#endregion
 
+#region HTTP clients & app services
 builder.Services.AddHttpClient();
 builder.Services.AddHttpClient<IExchangeRateService, ExchangeRateService>();
 
@@ -86,20 +95,29 @@ builder.Services.AddScoped<PaystackService>();
 builder.Services.AddScoped<AzureSearchIndexManager>();
 builder.Services.AddScoped<AzureAISearchService>();
 builder.Services.AddScoped<WidgetTokenService>();
+#endregion
 
 var app = builder.Build();
 
-// Initialize Cosmos DB containers ONCE
-var cosmos = app.Services.GetRequiredService<CosmosDbService>();
-await cosmos.InitializeAsync();
-
-// Middleware
+#region Development-only initialization
 if (app.Environment.IsDevelopment())
 {
+    // Swagger
     app.UseSwagger();
     app.UseSwaggerUI();
 
-    // Create search index (dev only)
+    // Cosmos container initialization
+    try
+    {
+        var cosmos = app.Services.GetRequiredService<CosmosDbService>();
+        await cosmos.InitializeAsync();
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"Warning: Cosmos initialization failed: {ex.Message}");
+    }
+
+    // Azure Search index (dev only)
     try
     {
         using var scope = app.Services.CreateScope();
@@ -110,11 +128,25 @@ if (app.Environment.IsDevelopment())
     }
     catch (Exception ex)
     {
-        Console.WriteLine(
-            $"Warning: Could not create search index: {ex.Message}");
+        Console.WriteLine($"Warning: Search index creation failed: {ex.Message}");
     }
 }
+else
+{
+    app.UseSwagger();
 
+    app.UseSwaggerUI(options =>
+    {
+        options.SwaggerEndpoint(
+            "/swagger/v1/swagger.json",
+            "BizBot API v1");
+
+        options.RoutePrefix = "swagger";
+    });
+}
+#endregion
+
+#region Global middleware
 app.UseHttpsRedirection();
 
 if (!app.Environment.IsDevelopment())
@@ -123,22 +155,21 @@ if (!app.Environment.IsDevelopment())
     app.UseHsts();
 }
 
-// CORS must come BEFORE endpoints
+// Order matters
 app.UseCors("WidgetPolicy");
-
-// Rate limiting middleware
 app.UseRateLimiter();
 
-// CSP (iframe embedding control)
+// CSP – allow iframe embedding ONLY from trusted domains
 app.Use(async (ctx, next) =>
 {
     ctx.Response.Headers["Content-Security-Policy"] =
         "frame-ancestors https://widget.bizbot.space https://app.bizbot.space";
     await next();
 });
+#endregion
 
-// Endpoints
-app.MapChatEndpoints();          // apply limiter inside this group
+#region Endpoints
+app.MapChatEndpoints();          // apply limiter inside endpoint group
 app.MapSubscriptionEndpoints();
 app.MapSearchEndpoints();
 app.MapSettingsEndpoints();
@@ -147,11 +178,17 @@ app.MapAdminEndpoints();
 app.MapPaystackEndpoints();
 
 app.MapGet("/", () => "BizBot API is running!");
+
 app.MapGet("/health", () =>
-    Results.Ok(new { status = "healthy", timestamp = DateTime.UtcNow }))
-    .ExcludeFromDescription(); ;
+    Results.Ok(new
+    {
+        status = "healthy",
+        timestamp = DateTime.UtcNow
+    }))
+    .ExcludeFromDescription();
 
 app.MapGet("/error", () =>
     Results.Problem("An unexpected error occurred."));
+#endregion
 
 app.Run();
