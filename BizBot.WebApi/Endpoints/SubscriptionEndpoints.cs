@@ -1,9 +1,9 @@
 ﻿using BizBot.WebApi.Events;
-using BizBot.WebApi.Helpers;
 using BizBot.WebApi.Models;
 using BizBot.WebApi.Requests;
 using BizBot.WebApi.Services;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 using System.Text.Json;
 
 namespace BizBot.WebApi.Endpoints
@@ -17,40 +17,30 @@ namespace BizBot.WebApi.Endpoints
             // Initialize subscription/checkout
             group.MapPost("/initialize", async (
                 [FromBody] InitializeSubscriptionRequest request,
-                [FromServices] PaystackService paystackService) =>
+                [FromServices] PaystackService paystackService,
+                IConfiguration config, CosmosDbService cosmos) =>
             {
                 try
                 {
-                    // Determine amount based on plan
-                    var amount = PlanAmount.GetPlanAmount(request.PlanName);
+                    // Generate reference
+                    var reference = $"BIZBOT_{Guid.NewGuid():N}";
 
-                    // Generate unique reference
-                    var reference = $"BIZBOT_{DateTime.Now:yyyyMMdd}_{Guid.NewGuid():N}";
-
-                    // Create metadata
-                    var metadata = new Dictionary<string, string>
-                    {
-                        ["plan"] = request.PlanName,
-                        ["customer_email"] = request.CustomerEmail,
-                        ["customer_name"] = request.CustomerName,
-                        ["app"] = "BizBot"
-                    };
-
-                    // Initialize PayStack transaction
+                    // Initialize Paystack
                     var response = await paystackService.CreateSubscriptionAsync(
                         request.PlanName,
                         request.CustomerEmail,
-                        amount,
                         reference,
-                        metadata);
-
-                    if (!response.Status)
-                        return Results.BadRequest(new { error = response.Message });
+                        new Dictionary<string, string>
+                        {
+                            ["plan"] = request.PlanName,
+                            ["billing_cycle"] = request.BillingCycle
+                        }
+                    );
 
                     return Results.Ok(new
                     {
                         authorizationUrl = response.Data.AuthorizationUrl,
-                        reference = response.Data.Reference,
+                        reference,
                         accessCode = response.Data.AccessCode
                     });
                 }
@@ -61,115 +51,163 @@ namespace BizBot.WebApi.Endpoints
             })
             .WithName("InitializeSubscription");
 
+
             // Verify transaction (callback from PayStack)
-            group.MapGet("/verify/{reference}", async (
-                string reference,
-                [FromServices] PaystackService paystackService,
-                [FromServices] CosmosDbService cosmosService) =>
+            group.MapGet("/verify/{reference}", async (string reference,
+                PaystackService paystack, CosmosDbService cosmos,
+                IConfiguration config, IEmailService emailService) =>
             {
-                try
-                {
-                    var verification = await paystackService.VerifyTransactionAsync(reference);
+                // Verify with Paystack
+                var verification = await paystack.VerifyTransactionAsync(reference);
 
-                    if (verification.Status && verification.Data.Status == "success")
+                if (verification.Data.Status != "success")
+                    return Results.Redirect("/subscription/failed");
+
+                // Find or create tenant
+                var tenant = await cosmos.GetTenantByEmailAsync(
+                    verification.Data.Customer.Email)
+                    ?? new TenantConfig
                     {
-                        // Create tenant in Cosmos DB
-                        var tenant = new TenantConfig
-                        {
-                            Id = reference,
-                            Name = $"{verification.Data.Customer.FirstName} {verification.Data.Customer.LastName}",
-                            Email = verification.Data.Customer.Email,
-                            Plan = verification.Data.Plan.Name,
-                            PlanCode = verification.Data.Plan.PlanCode,
-                            Amount = verification.Data.Amount / 100, // Convert back from kobo
-                            SubscribedAt = DateTime.UtcNow,
-                            IsActive = true,
-                            PaymentReference = reference,
+                        Id = Guid.NewGuid().ToString(),
+                        Email = verification.Data.Customer.Email
+                    };
 
-                            // AI defaults
-                            SystemPrompt = "You are a helpful AI assistant for this business.",
-                            Model = "bizbot-chat",
-                            MaxTokens = 800
-                        };
+                // Load plan config
+                var plans = config
+                    .GetSection("SubscriptionPlans")
+                    .Get<List<SubscriptionPlan>>()!;
 
-                        //await cosmosService.CreateTenantAsync(tenant);
-                        await cosmosService.UpsertTenantAsync(tenant);
+                var planKey = verification.Data.Metadata.Plan;
+                var billingCycle = verification.Data.Metadata.BillingCycle;
 
-                        // Redirect to success page
-                        return Results.Redirect("https://your-app.com/success");
-                    }
-                    else
-                    {
-                        // Redirect to failure page
-                        return Results.Redirect($"https://your-app.com/failed?error={verification.Message}");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    return Results.Problem($"Verification error: {ex.Message}");
-                }
+                var plan = plans.Single(p => p.Key == planKey);
+
+                var planCode = billingCycle == "yearly"
+                    ? plan.YearlyPlanCode
+                    : plan.MonthlyPlanCode;
+
+                // Persist subscription
+                tenant.Plan = plan.Key;
+                tenant.BillingCycle = billingCycle;
+                tenant.PlanCode = planCode;
+                tenant.IsActive = true;
+                tenant.SubscribedAt = DateTime.UtcNow;
+
+                await cosmos.UpsertTenantAsync(tenant);
+
+                // Send confirmation email
+                await emailService.SendAsync(
+                    tenant.Email!,
+                    "Your BizBot subscription is active 🎉",
+                    tenant.Plan!,
+                    tenant.BillingCycle!
+                );
+
+                // Redirect user to success page
+                return Results.Redirect("/subscription/success");
             })
             .WithName("VerifyTransaction");
 
+
             // PayStack webhook endpoint
-            group.MapPost("/webhook", async (
-                HttpRequest request,
-                [FromServices] PaystackService paystackService,
-                [FromServices] CosmosDbService cosmosService) =>
+            group.MapPost("/webhook", async (HttpRequest request,
+                PaystackService paystack, CosmosDbService cosmos,
+                IConfiguration config) =>
             {
-                // Read the request body
                 var json = await new StreamReader(request.Body).ReadToEndAsync();
 
-                try
-                {
-                    // Validate webhook signature
-                    var signature = request.Headers["x-paystack-signature"].FirstOrDefault();
-                    if (!paystackService.ValidateWebhookSignature(json, signature!))
-                        return Results.Unauthorized();
+                var signature = request.Headers["x-paystack-signature"].FirstOrDefault();
+                if (!paystack.ValidateWebhookSignature(json, signature!))
+                    return Results.Unauthorized();
 
-                    // Parse webhook event
-                    var webhookEvent = JsonSerializer.Deserialize<PaystackWebhookEvent>(json);
-
-                    if (webhookEvent?.Event == "charge.success")
-                    {
-                        var data = webhookEvent.Data;
-
-                        // Create or update tenant
-                        var tenant = new TenantConfig
-                        {
-                            Id = data.Reference,
-                            Name = $"{data.Customer?.FirstName} {data.Customer?.LastName}",
-                            Email = data.Customer?.Email!,
-                            PlanCode = data.Plan?.PlanCode,
-                            Plan = data.Plan?.Name!,
-                            Amount = data.Amount / 100,
-                            SubscribedAt = DateTime.UtcNow,
-                            IsActive = true,
-                            PaymentReference = data.Reference,
-
-                            // AI defaults
-                            SystemPrompt = "You are a helpful AI assistant for this business.",
-                            Model = "bizbot-chat",
-                            MaxTokens = 800
-                        };
-
-                        //await cosmosService.CreateTenantAsync(tenant);
-                        await cosmosService.UpsertTenantAsync(tenant);
-                    }
-                    else if (webhookEvent?.Event == "subscription.not_renew")
-                    {
-                        // Handle subscription cancellation
-                        // Update tenant status in Cosmos DB
-                    }
-
-                    return Results.Ok();
-                }
-                catch (Exception)
-                {
+                var webhook = JsonSerializer.Deserialize<PaystackWebhookEvent>(json);
+                if (webhook is null)
                     return Results.BadRequest();
+
+                switch (webhook.Event)
+                {
+                    case "charge.success":
+                        await HandleChargeSuccess(webhook, cosmos, config);
+                        break;
+
+                    case "subscription.disable":
+                        await HandleSubscriptionDisabled(webhook, cosmos);
+                        break;
                 }
-            })
-            .WithName("PaystackWebhook");
+
+                return Results.Ok();
+            });
+
+            //group.MapGet("/settings/white-label", async (
+            //    CosmosDbService cosmos,
+            //    ClaimsPrincipal user) =>
+            //{
+            //    var tenant = await cosmos.GetTenantFromUserAsync(user);
+
+            //    if (!PlanFeatures.CanUseWhiteLabel(tenant.Plan))
+            //        return Results.NotFound(); // or Forbid
+
+            //    return Results.Ok(tenant.WhiteLabelSettings);
+            //});
+
+
+            //group.MapPost("/webhook", async (HttpRequest request,
+            //    [FromServices] PaystackService paystackService,
+            //    [FromServices] CosmosDbService cosmosService) =>
+            //{
+            //    // Read the request body
+            //    var json = await new StreamReader(request.Body).ReadToEndAsync();
+
+            //    try
+            //    {
+            //        // Validate webhook signature
+            //        var signature = request.Headers["x-paystack-signature"].FirstOrDefault();
+            //        if (!paystackService.ValidateWebhookSignature(json, signature!))
+            //            return Results.Unauthorized();
+
+            //        // Parse webhook event
+            //        var webhookEvent = JsonSerializer.Deserialize<PaystackWebhookEvent>(json);
+
+            //        if (webhookEvent?.Event == "charge.success")
+            //        {
+            //            var data = webhookEvent.Data;
+
+            //            // Create or update tenant
+            //            var tenant = new TenantConfig
+            //            {
+            //                Id = data.Reference,
+            //                Name = $"{data.Customer?.FirstName} {data.Customer?.LastName}",
+            //                Email = data.Customer?.Email!,
+            //                PlanCode = data.Plan?.PlanCode,
+            //                Plan = data.Plan?.Name!,
+            //                Amount = data.Amount / 100,
+            //                SubscribedAt = DateTime.UtcNow,
+            //                IsActive = true,
+            //                PaymentReference = data.Reference,
+
+            //                // AI defaults
+            //                SystemPrompt = "You are a helpful AI assistant for this business.",
+            //                Model = "bizbot-chat",
+            //                MaxTokens = 800
+            //            };
+
+            //            //await cosmosService.CreateTenantAsync(tenant);
+            //            await cosmosService.UpsertTenantAsync(tenant);
+            //        }
+            //        else if (webhookEvent?.Event == "subscription.not_renew")
+            //        {
+            //            // Handle subscription cancellation
+            //            // Update tenant status in Cosmos DB
+            //        }
+
+            //        return Results.Ok();
+            //    }
+            //    catch (Exception)
+            //    {
+            //        return Results.BadRequest();
+            //    }
+            //})
+            //.WithName("PaystackWebhook");
 
             // Get available plans
             group.MapGet("/plans", () =>
@@ -211,6 +249,86 @@ namespace BizBot.WebApi.Endpoints
                 return Results.Ok(plans);
             })
             .WithName("GetPlans");
+
+
+            //group.MapPost("/change-plan", async (ChangePlanRequest request,
+            //    CosmosDbService cosmos, PaystackService paystack) =>
+            //{
+            //    var tenant = await cosmos.GetTenantAsync(request.TenantId);
+
+            //    // 1. Disable old subscription
+            //    await paystack.DisableSubscriptionAsync(
+            //        tenant.SubscriptionCode,
+            //        tenant.EmailToken);
+
+            //    // 2. Start new subscription
+            //    var reference = $"BIZBOT_{Guid.NewGuid():N}";
+
+            //    var response = await paystack.CreateSubscriptionAsync(
+            //        request.NewPlanCode,
+            //        tenant.Email,
+            //        reference,
+            //        metadata);
+
+            //    return Results.Ok(response);
+            //});
+        }
+
+        private static async Task HandleSubscriptionDisabled(
+            PaystackWebhookEvent webhook, CosmosDbService cosmos)
+        {
+            var data = webhook.Data;
+
+            var tenant = await cosmos.GetTenantByEmailAsync(data.Customer!.Email);
+            if (tenant == null)
+                return;
+
+            tenant.IsActive = false;
+            tenant.CancelledAt = DateTime.UtcNow;
+
+            await cosmos.UpsertTenantAsync(tenant);
+        }
+
+        private static async Task HandleChargeSuccess(
+            PaystackWebhookEvent webhook, CosmosDbService cosmos, 
+            IConfiguration config)
+        {
+            var data = webhook.Data;
+
+            // Always identify tenant by email (or stored tenant id)
+            var tenant = await cosmos.GetTenantByEmailAsync(data.Customer!.Email)
+                ?? new TenantConfig
+                {
+                    Id = Guid.NewGuid().ToString(),
+                    Email = data.Customer.Email
+                };
+
+            // Extract metadata (SOURCE OF TRUTH)
+            var planKey = data.Metadata.Plan;
+            var billingCycle = data.Metadata.BillingCycle;
+
+            // Load plan config
+            var plans = config
+                .GetSection("SubscriptionPlans")
+                .Get<List<SubscriptionPlan>>()!;
+
+            var plan = plans.Single(p => p.Key == planKey);
+
+            var planCode = billingCycle == "yearly"
+                ? plan.YearlyPlanCode
+                : plan.MonthlyPlanCode;
+
+            // Persist billing state
+            tenant.Plan = planKey;
+            tenant.BillingCycle = billingCycle;
+            tenant.PlanCode = planCode;
+            tenant.SubscriptionCode = data.Subscription?.SubscriptionCode;
+            tenant.EmailToken = data.Subscription?.EmailToken;
+            tenant.IsActive = true;
+            tenant.SubscribedAt = DateTime.UtcNow;
+            tenant.PaymentReference = data.Reference;
+
+            await cosmos.UpsertTenantAsync(tenant);
         }
     }
 }

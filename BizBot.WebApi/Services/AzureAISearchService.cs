@@ -1,6 +1,7 @@
 ﻿using Azure;
 using Azure.Search.Documents;
 using Azure.Search.Documents.Models;
+using BizBot.WebApi.Responses;
 
 namespace BizBot.WebApi.Services
 {
@@ -25,35 +26,51 @@ namespace BizBot.WebApi.Services
                 new AzureKeyCredential(apiKey!));
         }
 
-        public async Task<string> SearchRelevantContextSimpleAsync(string query, string tenantId)
+        public async Task<List<KnowledgeChunk>> SearchRelevantChunksAsync(string query, string tenantId)
         {
-            try
+            var chunks = new List<KnowledgeChunk>();
+
+            var searchOptions = new SearchOptions
             {
-                var searchOptions = new SearchOptions
-                {
-                    Filter = $"tenantId eq '{tenantId}'",
-                    Size = 3,
-                    QueryType = SearchQueryType.Simple
-                };
+                Filter = $"tenantId eq '{tenantId}'",
+                Size = _configuration.GetValue<int>("AzureSearch:MaxResults"),
+                QueryType = SearchQueryType.Semantic,
+                SearchMode = SearchMode.All // Ensure it doesn't just match common words
+            };
 
-                var results = await _searchClient.SearchAsync<SearchDocument>(query, searchOptions);
+            searchOptions.SemanticSearch = new SemanticSearchOptions
+            {
+                SemanticConfigurationName = _configuration["AzureSearch:SemanticConfigurationName"]
+            };
 
-                var contextBuilder = new System.Text.StringBuilder();
-                await foreach (var result in results.Value.GetResultsAsync())
+            searchOptions.SearchFields.Add("content");
+            searchOptions.SearchFields.Add("title");
+
+            var results = await _searchClient.SearchAsync<SearchDocument>(query, searchOptions);
+            var minScore = _configuration.GetValue<double>("AzureSearch:MinRelevanceScore");
+
+            await foreach (var result in results.Value.GetResultsAsync())
+            {
+                // The RerankerScore is set to (0-4 scale) if available
+                double? finalScore = result.SemanticSearch?.RerankerScore ?? result.Score;
+
+                if (finalScore < minScore)
+                    continue;
+
+                var content = result.Document.TryGetValue("content", out var c) ? c?.ToString() : null;
+                var title = result.Document.TryGetValue("title", out var t) ? t?.ToString() : null;
+
+                if (!string.IsNullOrWhiteSpace(content))
                 {
-                    if (result.Document.TryGetValue("content", out var content))
-                    {
-                        contextBuilder.AppendLine($"• {content}");
-                    }
+                    chunks.Add(new KnowledgeChunk(
+                        Content: content,
+                        Title: title,
+                        Score: finalScore
+                    ));
                 }
+            }
 
-                return contextBuilder.ToString();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Search failed for query: {Query}", query);
-                return string.Empty;
-            }
+            return chunks.OrderByDescending(c => c.Score).ToList();
         }
 
         public async Task IndexDocumentAsync(string tenantId, string documentId, string content, string? title = null)
