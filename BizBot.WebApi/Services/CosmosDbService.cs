@@ -1,6 +1,8 @@
 ﻿using BizBot.WebApi.Models;
 using Microsoft.Azure.Cosmos;
+using Microsoft.Azure.Cosmos.Linq;
 using System.Net;
+using System.Security.Claims;
 using System.Text.Json;
 
 namespace BizBot.WebApi.Services
@@ -42,7 +44,17 @@ namespace BizBot.WebApi.Services
                     new ContainerProperties
                     {
                         Id = tenantsContainerId,
-                        PartitionKeyPath = "/id"
+                        PartitionKeyPath = "/id",
+                        IndexingPolicy = new IndexingPolicy
+                        {
+                            IncludedPaths =
+                            {
+                                new IncludedPath { Path = "/id/?" },
+                                new IncludedPath { Path = "/email/?" },
+                                new IncludedPath { Path = "/plan/?" },
+                                new IncludedPath { Path = "/isActive/?" }
+                            }
+                        }
                     });
 
                 _conversationsContainer = await database.Database.CreateContainerIfNotExistsAsync(
@@ -158,11 +170,8 @@ namespace BizBot.WebApi.Services
         }
 
         // Conversation Logging
-        public async Task LogConversationAsync(
-            string tenantId,
-            string conversationId,
-            string userMessage,
-            string assistantMessage)
+        public async Task LogConversationAsync(string tenantId,
+            string conversationId, string userMessage, string assistantMessage)
         {
             EnsureInitialized();
 
@@ -207,6 +216,231 @@ namespace BizBot.WebApi.Services
             }
 
             return results;
+        }
+
+        public async Task<TenantConfig?> GetTenantByEmailAsync(string email)
+        {
+            var query = new QueryDefinition("SELECT * FROM c WHERE c.email = @email")
+                .WithParameter("@email", email);
+
+            using var iterator = _tenantsContainer!.GetItemQueryIterator<TenantConfig>(query);
+
+            while (iterator.HasMoreResults)
+            {
+                var response = await iterator.ReadNextAsync();
+                return response.Resource.FirstOrDefault();
+            }
+
+            return null;
+        }
+
+        public async Task<TenantConfig> GetTenantFromUserAsync(ClaimsPrincipal user)
+        {
+            var email = user.FindFirst(ClaimTypes.Email)?.Value;
+
+            if (string.IsNullOrWhiteSpace(email))
+                throw new UnauthorizedAccessException("Authenticated user has no email");
+
+            var tenant = await GetTenantByEmailAsync(email);
+
+            if (tenant == null)
+                throw new InvalidOperationException("Tenant not found");
+
+            return tenant;
+        }
+
+        public async Task<TenantConfig?> GetTenantByIdAsync(string tenantId)
+        {
+            var query = new QueryDefinition(
+                "SELECT * FROM c WHERE c.id = @id")
+                .WithParameter("@id", tenantId);
+
+            using var iterator = _tenantsContainer!.GetItemQueryIterator<TenantConfig>(query);
+
+            if (!iterator.HasMoreResults)
+                return null;
+
+            var response = await iterator.ReadNextAsync();
+            return response.Resource.FirstOrDefault();
+        }
+
+        public async Task<TenantDailyUsage> GetDailyUsageAsync(string tenantId, DateOnly date)
+        {
+            EnsureInitialized();
+
+            var id = $"{tenantId}_{date:yyyy-MM-dd}";
+
+            try
+            {
+                var response = await _tenantsContainer!.ReadItemAsync<TenantDailyUsage>(
+                    id,
+                    new PartitionKey(tenantId));
+
+                return response.Resource;
+            }
+            catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+            {
+                return new TenantDailyUsage
+                {
+                    Id = id,
+                    TenantId = tenantId,
+                    Date = date.ToString("yyyy-MM-dd"),
+                    Messages = 0
+                };
+            }
+        }
+
+        public async Task IncrementUsageAsync(string tenantId, DateOnly date)
+        {
+            EnsureInitialized();
+
+            var id = $"{tenantId}_{date:yyyy-MM-dd}";
+
+            try
+            {
+                var response = await _tenantsContainer!.ReadItemAsync<TenantDailyUsage>(
+                    id,
+                    new PartitionKey(tenantId));
+
+                response.Resource.Messages++;
+
+                await _tenantsContainer.UpsertItemAsync(
+                    response.Resource,
+                    new PartitionKey(tenantId));
+            }
+            catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+            {
+                var usage = new TenantDailyUsage
+                {
+                    Id = id,
+                    TenantId = tenantId,
+                    Date = date.ToString("yyyy-MM-dd"),
+                    Messages = 1
+                };
+
+                await _tenantsContainer!.UpsertItemAsync(
+                    usage,
+                    new PartitionKey(tenantId));
+            }
+        }
+
+        public async Task<int> CountConversationsAsync(string tenantId)
+        {
+            EnsureInitialized();
+
+            var query = new QueryDefinition(
+                "SELECT VALUE COUNT(1) FROM c WHERE c.tenantId = @tenantId")
+                .WithParameter("@tenantId", tenantId);
+
+            using var iterator = _conversationsContainer!
+                .GetItemQueryIterator<int>(
+                    query,
+                    requestOptions: new QueryRequestOptions
+                    {
+                        PartitionKey = new PartitionKey(tenantId)
+                    });
+
+            if (iterator.HasMoreResults)
+            {
+                var response = await iterator.ReadNextAsync();
+                return response.Resource.FirstOrDefault();
+            }
+
+            return 0;
+        }
+
+        public async Task<IEnumerable<TenantConfig>> GetAllTenantsAsync()
+        {
+            var query = _tenantsContainer!
+                .GetItemLinqQueryable<TenantConfig>(allowSynchronousQueryExecution: true)
+                .Where(t => true)
+                .ToFeedIterator();
+
+            var results = new List<TenantConfig>();
+            while (query.HasMoreResults)
+                results.AddRange(await query.ReadNextAsync());
+
+            return results;
+        }
+
+        public async Task<int> GetConversationCountAsync()
+        {
+            var query = _conversationsContainer!
+                .GetItemLinqQueryable<Conversation>(allowSynchronousQueryExecution: true)
+                .Select(c => c.Id)
+                .ToFeedIterator();
+
+            int count = 0;
+            while (query.HasMoreResults)
+                count += (await query.ReadNextAsync()).Count;
+
+            return count;
+        }
+
+        public async Task UpsertDailyUsageAsync(TenantDailyUsage usage)
+        {
+            await _tenantsContainer!.UpsertItemAsync(
+                usage,
+                new PartitionKey(usage.TenantId));
+        }
+
+        public async Task<bool> HasProcessedWebhookAsync(string eventType, string reference)
+        {
+            EnsureInitialized();
+
+            var id = $"{eventType}_{reference}";
+
+            try
+            {
+                await _tenantsContainer!.ReadItemAsync<ProcessedWebhook>(
+                    id,
+                    new PartitionKey(id));
+
+                return true;
+            }
+            catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+            {
+                return false;
+            }
+        }
+
+        public async Task MarkWebhookProcessedAsync(string eventType, string reference)
+        {
+            EnsureInitialized();
+
+            var item = new ProcessedWebhook
+            {
+                Id = $"{eventType}_{reference}",
+                EventType = eventType,
+                Reference = reference
+            };
+
+            await _tenantsContainer!.UpsertItemAsync(
+                item,
+                new PartitionKey(item.Id));
+        }
+
+        public async Task MarkSubscriptionPaidAsync(string reference)
+        {
+            EnsureInitialized();
+
+            var query = new QueryDefinition(
+                "SELECT * FROM c WHERE c.paymentReference = @ref")
+                .WithParameter("@ref", reference);
+
+            using var iterator =
+                _tenantsContainer!.GetItemQueryIterator<TenantConfig>(query);
+
+            if (!iterator.HasMoreResults) return;
+
+            var response = await iterator.ReadNextAsync();
+            var tenant = response.Resource.FirstOrDefault();
+            if (tenant == null) return;
+
+            tenant.IsActive = true;
+            tenant.SubscribedAt = DateTime.UtcNow;
+
+            await UpsertTenantAsync(tenant);
         }
     }
 }

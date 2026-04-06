@@ -2,7 +2,8 @@
 {
     public record InitializeSubscriptionRequest(
         string PlanName,
+        string BillingCycle, // "monthly" | "yearly"
         string CustomerEmail,
-        string CustomerName,
-        string? Phone = null);
+        string CustomerName);
+        //string? Phone = null);
 }

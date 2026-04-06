@@ -1,4 +1,15 @@
-﻿namespace BizBot.Client.Responses
+﻿using System.Text.Json.Serialization;
+
+namespace BizBot.Client.Responses
 {
-    public record SubscriptionInitResponse(string AuthorizationUrl, string Reference, string AccessCode);
+    public record SubscriptionInitResponse(
+        [property: JsonPropertyName("authorizationUrl")]
+        string AuthorizationUrl,
+
+        [property: JsonPropertyName("reference")]
+        string Reference,
+
+        [property: JsonPropertyName("accessCode")]
+        string AccessCode
+    );
 }

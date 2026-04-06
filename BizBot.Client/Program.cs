@@ -61,7 +61,7 @@ builder.Services.AddMudServices(config =>
 builder.Services.AddHttpClient("BizBotApi", client =>
 {
     client.BaseAddress = new Uri(builder.Configuration["ApiSettings:BaseUrl"] ?? "https://localhost:7223");
-    client.Timeout = TimeSpan.FromMinutes(5);
+    client.Timeout = TimeSpan.FromMinutes(15);
 });
 builder.Services.AddScoped(sp =>
 {
